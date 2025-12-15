@@ -1,0 +1,55 @@
+{
+  "openapi": "3.0.0",
+  "info": {
+    "title": "Test API",
+    "version": "1.0.0"
+  },
+  "servers": [],
+  "paths": {
+    "/primitives": {
+      "post": {
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "parameters": [],
+        "tags": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Primitives"
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Primitives": {
+        "type": "object",
+        "properties": {
+          "nothing": {},
+          "unknown": {},
+          "missing": {
+            "type": "string",
+            "format": "nullable"
+          },
+          "empty": {
+            "type": "string",
+            "format": "nullable"
+          }
+        },
+        "required": [
+          "nothing",
+          "unknown",
+          "missing",
+          "empty"
+        ]
+      }
+    }
+  }
+}

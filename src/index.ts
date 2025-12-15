@@ -786,7 +786,17 @@ class RouteAnalyzer {
   }
 
   private extractJSDoc(node: ts.Node) {
-    const tags = ts.getJSDocTags(node);
+    let tags = ts.getJSDocTags(node);
+
+    // If no tags on the node, check the parent (ExpressionStatement)
+    if (
+      tags.length === 0 &&
+      node.parent &&
+      ts.isExpressionStatement(node.parent)
+    ) {
+      tags = ts.getJSDocTags(node.parent);
+    }
+
     const result: any = { tags: [] };
 
     tags.forEach((tag) => {
