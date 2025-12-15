@@ -1,0 +1,47 @@
+{
+  "name": "swagger-autogen-ast",
+  "version": "1.0.0",
+  "description": "A zero-config OpenAPI 3.0 generator for Express. The AST-based spiritual successor to swagger-autogen with automatic type inference.",
+  "homepage": "https://github.com/anthfgreco/swagger-autogen-ast#readme",
+  "bugs": {
+    "url": "https://github.com/anthfgreco/swagger-autogen-ast/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/anthfgreco/swagger-autogen-ast.git"
+  },
+  "license": "MIT",
+  "author": "Anthony Greco",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "bin": {
+    "swagger-autogen-ast": "./dist/index.js"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "prepublishOnly": "npm run build",
+    "prettier": "prettier src --write",
+    "sort-package-json": "npx sort-package-json",
+    "test": "vitest run",
+    "test:slow": "cross-env RUN_SLOW_TESTS=1 vitest run",
+    "test:watch": "vitest watch",
+    "test:watch:slow": "cross-env RUN_SLOW_TESTS=1 vitest watch"
+  },
+  "dependencies": {
+    "ora": "^9.0.0",
+    "typescript": "^5.9.3"
+  },
+  "devDependencies": {
+    "@types/node": "^25.0.2",
+    "cross-env": "^10.1.0",
+    "dotenv": "^17.2.3",
+    "prettier": "^3.7.4",
+    "prettier-plugin-organize-imports": "^4.2.0",
+    "vitest": "^4.0.15"
+  }
+}
