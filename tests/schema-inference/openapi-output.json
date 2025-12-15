@@ -1,0 +1,118 @@
+{
+  "openapi": "3.0.0",
+  "info": {
+    "title": "Test API",
+    "version": "1.0.0"
+  },
+  "servers": [],
+  "paths": {
+    "/user": {
+      "post": {
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "parameters": [],
+        "tags": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/User"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin": {
+      "post": {
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "parameters": [],
+        "tags": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/User"
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "permissions": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      }
+                    },
+                    "required": [
+                      "permissions"
+                    ]
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "User": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "number"
+          },
+          "name": {
+            "type": "string"
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "admin",
+              "user"
+            ]
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "metadata": {
+            "type": "object",
+            "properties": {
+              "lastLogin": {
+                "type": "string"
+              },
+              "ip": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "lastLogin",
+              "ip"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "role",
+          "tags",
+          "metadata"
+        ]
+      }
+    }
+  }
+}
