@@ -17,7 +17,9 @@ describe("middleware-external auth", () => {
     expect(route).toBeDefined();
 
     const params = route.parameters || [];
-    const auth = params.find((p: any) => p.in === "header" && p.name.toLowerCase() === "authorization");
+    const auth = params.find(
+      (p: any) => p.in === "header" && p.name.toLowerCase() === "authorization",
+    );
     expect(auth).toBeDefined();
 
     expect(route.responses["401"]).toBeDefined();
