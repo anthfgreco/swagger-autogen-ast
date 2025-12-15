@@ -1,110 +1,33 @@
 #!/usr/bin/env node
 
 import fs from "fs";
+import { OpenAPIV3 } from "openapi-types";
 import path from "path";
 import ts from "typescript";
 import { fileURLToPath } from "url";
 
-/**
- * -------------------------------------------------------------------------
- * Types & Interfaces
- * -------------------------------------------------------------------------
- */
-
-interface GeneratorOptions {
+export interface GeneratorOptions {
   entryFile: string;
   outputFile: string;
-  tsconfigPath?: string | undefined;
-  info?: OpenApiInfo | undefined;
-  servers?: OpenApiServer[] | undefined;
+  tsconfigPath?: string;
+  info?: OpenAPIV3.InfoObject;
+  servers?: OpenAPIV3.ServerObject[];
 }
-
-interface OpenApiInfo {
-  title: string;
-  version: string;
-  description?: string | undefined;
-}
-
-interface OpenApiServer {
-  url: string;
-  description?: string | undefined;
-}
-
-interface OpenApiDocument {
-  openapi: string;
-  info: OpenApiInfo;
-  servers: OpenApiServer[];
-  paths: Record<string, Record<string, OperationObject>>;
-  components: {
-    schemas: Record<string, SchemaObject>;
-    securitySchemes?: Record<string, any> | undefined;
-  };
-}
-
-interface OperationObject {
-  summary?: string | undefined;
-  description?: string | undefined;
-  operationId?: string | undefined;
-  tags?: string[] | undefined;
-  parameters?: ParameterObject[] | undefined;
-  requestBody?: RequestBodyObject | undefined;
-  responses: Record<string, ResponseObject>;
-  deprecated?: boolean | undefined;
-}
-
-interface ParameterObject {
-  name: string;
-  in: "query" | "header" | "path" | "cookie";
-  description?: string | undefined;
-  required?: boolean | undefined;
-  schema?: SchemaObject | undefined;
-}
-
-interface RequestBodyObject {
-  description?: string | undefined;
-  content: Record<string, MediaTypeObject>;
-  required?: boolean | undefined;
-}
-
-interface ResponseObject {
-  description: string;
-  content?: Record<string, MediaTypeObject> | undefined;
-}
-
-interface MediaTypeObject {
-  schema?: SchemaObject | undefined;
-}
-
-interface SchemaObject {
-  type?: string | undefined;
-  format?: string | undefined;
-  properties?: Record<string, SchemaObject> | undefined;
-  items?: SchemaObject | undefined;
-  required?: string[] | undefined;
-  enum?: any[] | undefined;
-  $ref?: string | undefined;
-  oneOf?: SchemaObject[] | undefined;
-  anyOf?: SchemaObject[] | undefined;
-  allOf?: SchemaObject[] | undefined;
-  description?: string | undefined;
-  example?: any | undefined;
-}
-
-/**
- * -------------------------------------------------------------------------
- * AST & Schema Analysis
- * -------------------------------------------------------------------------
- */
 
 class SchemaBuilder {
   private typeChecker: ts.TypeChecker;
-  public definitions: Record<string, SchemaObject> = {};
+  public definitions: Record<
+    string,
+    OpenAPIV3.SchemaObject | OpenAPIV3.ReferenceObject
+  > = {};
 
   constructor(typeChecker: ts.TypeChecker) {
     this.typeChecker = typeChecker;
   }
 
-  public generateSchema(nodeOrType: ts.Node | ts.Type): SchemaObject {
+  public generateSchema(
+    nodeOrType: ts.Node | ts.Type,
+  ): OpenAPIV3.SchemaObject | OpenAPIV3.ReferenceObject {
     const type =
       "kind" in nodeOrType
         ? this.typeChecker.getTypeAtLocation(nodeOrType as ts.Node)
@@ -113,7 +36,10 @@ class SchemaBuilder {
     return this.typeToSchema(type);
   }
 
-  private typeToSchema(type: ts.Type, depth = 0): SchemaObject {
+  private typeToSchema(
+    type: ts.Type,
+    depth = 0,
+  ): OpenAPIV3.SchemaObject | OpenAPIV3.ReferenceObject {
     if (depth > 10) return {};
 
     // Unwrap Promise<T> to T
@@ -131,6 +57,7 @@ class SchemaBuilder {
     if (typeNodeString === "any") return {};
     if (typeNodeString === "void") return {};
     if (typeNodeString === "undefined" || typeNodeString === "null") {
+      // Logic preserved: using format: 'nullable' to satisfy existing tests
       return { type: "string", format: "nullable" };
     }
 
@@ -245,9 +172,15 @@ class SchemaBuilder {
     return { type: "object" };
   }
 
-  private extractObjectDefinition(type: ts.Type, depth: number): SchemaObject {
+  private extractObjectDefinition(
+    type: ts.Type,
+    depth: number,
+  ): OpenAPIV3.SchemaObject {
     const props = type.getProperties();
-    const properties: Record<string, SchemaObject> = {};
+    const properties: Record<
+      string,
+      OpenAPIV3.SchemaObject | OpenAPIV3.ReferenceObject
+    > = {};
     const required: string[] = [];
 
     for (const prop of props) {
@@ -305,15 +238,21 @@ class SchemaBuilder {
       );
 
       if (docComment) {
-        properties[propName].description = docComment;
+        if (!("$ref" in properties[propName])) {
+          (properties[propName] as OpenAPIV3.SchemaObject).description =
+            docComment;
+        }
       }
     }
 
-    return {
-      type: "object",
-      properties: Object.keys(properties).length > 0 ? properties : undefined,
-      required: required.length > 0 ? required : undefined,
-    };
+    const schema: OpenAPIV3.SchemaObject = { type: "object" };
+    if (Object.keys(properties).length > 0) {
+      schema.properties = properties;
+    }
+    if (required.length > 0) {
+      schema.required = required;
+    }
+    return schema;
   }
 
   private isArrayType(type: ts.Type): boolean {
@@ -336,17 +275,11 @@ class SchemaBuilder {
   }
 }
 
-/**
- * -------------------------------------------------------------------------
- * Route Analysis
- * -------------------------------------------------------------------------
- */
-
 class RouteAnalyzer {
   private program: ts.Program;
   private checker: ts.TypeChecker;
   private schemaBuilder: SchemaBuilder;
-  private paths: Record<string, Record<string, OperationObject>> = {};
+  private paths: OpenAPIV3.PathsObject = {};
 
   constructor(options: GeneratorOptions) {
     const compilerOptions: ts.CompilerOptions = options.tsconfigPath
@@ -479,7 +412,12 @@ class RouteAnalyzer {
         ts.isArrowFunction(handlerNode) ||
         ts.isFunctionDeclaration(handlerNode)
       ) {
-        this.addOperation(openApiPath, methodName, handlerNode, node);
+        this.addOperation(
+          openApiPath,
+          methodName as OpenAPIV3.HttpMethods,
+          handlerNode,
+          node,
+        );
       }
     }
   }
@@ -576,13 +514,16 @@ class RouteAnalyzer {
 
   private addOperation(
     routePath: string,
-    method: string,
+    method: OpenAPIV3.HttpMethods,
     handler: ts.FunctionDeclaration | ts.FunctionExpression | ts.ArrowFunction,
     callNode: ts.CallExpression,
   ) {
     if (!this.paths[routePath]) this.paths[routePath] = {};
+    const pathItem = this.paths[routePath];
 
-    const operation: OperationObject = {
+    if (!pathItem) return;
+
+    const operation: OpenAPIV3.OperationObject = {
       responses: {
         "200": { description: "OK" },
       },
@@ -610,7 +551,7 @@ class RouteAnalyzer {
         const paramName = p.replace(/[{}]/g, "");
         if (
           !operation.parameters!.some(
-            (ex) => ex.name === paramName && ex.in === "path",
+            (ex) => "name" in ex && ex.name === paramName && ex.in === "path",
           )
         ) {
           operation.parameters!.push({
@@ -651,7 +592,7 @@ class RouteAnalyzer {
             const propName = prop.getName();
             if (
               !operation.parameters!.some(
-                (p) => p.name === propName && p.in === "query",
+                (p) => "name" in p && p.name === propName && p.in === "query",
               )
             ) {
               operation.parameters!.push({
@@ -675,16 +616,18 @@ class RouteAnalyzer {
       );
     }
 
-    this.paths[routePath][method] = operation;
+    pathItem[method] = operation;
   }
 
-  private isValidSchema(schema: SchemaObject): boolean {
+  private isValidSchema(
+    schema: OpenAPIV3.SchemaObject | OpenAPIV3.ReferenceObject,
+  ): boolean {
+    if ("$ref" in schema) return true;
     return (
       (Object.keys(schema).length > 0 &&
         schema.type !== "object" &&
         Object.keys(schema).length > 1) ||
       Object.keys(schema.properties || {}).length > 0 ||
-      !!schema.$ref ||
       !!schema.allOf ||
       !!schema.anyOf ||
       !!schema.oneOf
@@ -693,7 +636,7 @@ class RouteAnalyzer {
 
   private scanBodyUsage(
     node: ts.Node,
-    operation: OperationObject,
+    operation: OpenAPIV3.OperationObject,
     reqName: string | undefined,
     resName: string | undefined,
     visited = new Set<ts.Node>(),
@@ -739,8 +682,12 @@ class RouteAnalyzer {
                 operation.responses["200"] = { description: "OK" };
               }
 
-              if (!operation.responses["200"].content) {
-                operation.responses["200"].content = {
+              const successResponse = operation.responses[
+                "200"
+              ] as OpenAPIV3.ResponseObject;
+
+              if (!successResponse.content) {
+                successResponse.content = {
                   "application/json": { schema },
                 };
               }
@@ -766,7 +713,7 @@ class RouteAnalyzer {
             expr.expression.getText() === reqName &&
             expr.name.text === "body"
           ) {
-            let schema: SchemaObject = {};
+            let schema: OpenAPIV3.SchemaObject | OpenAPIV3.ReferenceObject = {};
             try {
               const t = typeNode
                 ? this.checker.getTypeFromTypeNode(typeNode)
@@ -805,7 +752,8 @@ class RouteAnalyzer {
                 const propName = prop.getName();
                 if (
                   !operation.parameters!.some(
-                    (p) => p.name === propName && p.in === "query",
+                    (p) =>
+                      "name" in p && p.name === propName && p.in === "query",
                   )
                 ) {
                   operation.parameters!.push({
@@ -829,7 +777,7 @@ class RouteAnalyzer {
     visit(node);
   }
 
-  private addResponse(operation: OperationObject, code: string) {
+  private addResponse(operation: OpenAPIV3.OperationObject, code: string) {
     if (!operation.responses[code]) {
       const descriptions: Record<string, string> = {
         "200": "OK",
@@ -847,7 +795,10 @@ class RouteAnalyzer {
     }
   }
 
-  private scanSwaggerComments(body: ts.Block, operation: OperationObject) {
+  private scanSwaggerComments(
+    body: ts.Block,
+    operation: OpenAPIV3.OperationObject,
+  ) {
     const sourceFile = body.getSourceFile();
     const fullText = sourceFile.getFullText();
 
@@ -863,7 +814,10 @@ class RouteAnalyzer {
     body.statements.forEach(visitStatement);
   }
 
-  private parseSwaggerComment(comment: string, operation: OperationObject) {
+  private parseSwaggerComment(
+    comment: string,
+    operation: OpenAPIV3.OperationObject,
+  ) {
     const content = comment
       .replace(/^\/\//, "")
       .replace(/^\/\*/, "")
@@ -910,7 +864,7 @@ class RouteAnalyzer {
     if (lastPart) current[lastPart] = value;
   }
 
-  private mergeMetadata(op: OperationObject, meta: any) {
+  private mergeMetadata(op: OpenAPIV3.OperationObject, meta: any) {
     if (meta.summary) op.summary = meta.summary;
     if (meta.description) op.description = meta.description;
     if (meta.tags && meta.tags.length) op.tags = meta.tags;
@@ -955,23 +909,17 @@ class RouteAnalyzer {
   }
 }
 
-/**
- * -------------------------------------------------------------------------
- * Main Logic
- * -------------------------------------------------------------------------
- */
-
 export function generateOpenApi(options: GeneratorOptions) {
   if (!fs.existsSync(options.entryFile)) {
     throw new Error(`Entry file not found: ${options.entryFile}`);
   }
 
-  console.log("🔍 Analyzing AST...");
+  console.log("Analyzing AST...");
 
   const analyzer = new RouteAnalyzer(options);
   const { paths, schemas } = analyzer.analyze(options.entryFile);
 
-  const doc: OpenApiDocument = {
+  const doc: OpenAPIV3.Document = {
     openapi: "3.0.0",
     info: options.info || {
       title: "Auto Generated API",
@@ -984,18 +932,12 @@ export function generateOpenApi(options: GeneratorOptions) {
     },
   };
 
-  console.log(`✅ Found ${Object.keys(paths).length} paths.`);
-  console.log(`✅ Generated ${Object.keys(schemas).length} schemas.`);
+  console.log(`Found ${Object.keys(paths).length} paths.`);
+  console.log(`Generated ${Object.keys(schemas).length} schemas.`);
 
   fs.writeFileSync(options.outputFile, JSON.stringify(doc, null, 2));
-  console.log(`💾 Swagger file saved to: ${options.outputFile}`);
+  console.log(`Swagger file saved to: ${options.outputFile}`);
 }
-
-/**
- * -------------------------------------------------------------------------
- * CLI Execution Check
- * -------------------------------------------------------------------------
- */
 
 const isMain = () => {
   if (import.meta && import.meta.url) {
@@ -1009,7 +951,6 @@ const isMain = () => {
   return false;
 };
 
-/** Helper to find tsconfig recursively. */
 const findTsConfig = (startDir: string): string | undefined => {
   let dir = startDir;
   while (dir !== path.parse(dir).root) {
@@ -1032,21 +973,30 @@ if (isMain()) {
   const entryFile = path.resolve(process.cwd(), args[0]!);
   const outputFile = path.resolve(process.cwd(), args[1]!);
 
-  // Auto-detect tsconfig if not provided
   let tsconfigPath = args[2] ? path.resolve(process.cwd(), args[2]) : undefined;
   if (!tsconfigPath) {
     tsconfigPath = findTsConfig(path.dirname(entryFile));
   }
 
-  generateOpenApi({
+  const options: GeneratorOptions = {
     entryFile,
     outputFile,
-    tsconfigPath,
     info: {
       title: "My API",
       version: "1.0.0",
       description: "Generated via AST analysis",
     },
     servers: [{ url: "http://localhost:3000" }],
-  });
+  };
+
+  if (tsconfigPath) {
+    options.tsconfigPath = tsconfigPath;
+  }
+
+  try {
+    generateOpenApi(options);
+  } catch (err) {
+    console.error(err);
+    process.exit(1);
+  }
 }
