@@ -164,6 +164,18 @@ class SchemaBuilder {
       const symbol = type.getSymbol() || type.aliasSymbol;
       if (symbol) {
         const name = symbol.getName();
+
+        // Treat complex library types as generic objects to prevent recursion hell
+        if (
+          name === "ReactElement" ||
+          name === "CSSProperties" ||
+          name === "ReactPortal" ||
+          name === "Element" || // DOM Element
+          name === "HTMLElement"
+        ) {
+          return { type: "object", description: name };
+        }
+
         // Filter out internal/standard types
         if (
           name !== "Object" &&
@@ -206,27 +218,89 @@ class SchemaBuilder {
     const properties: Record<string, SchemaObject> = {};
     const required: string[] = [];
 
+    // Blocklist for standard Object/Array prototype methods
+    const propertyBlocklist = new Set([
+      "toString",
+      "toLocaleString",
+      "valueOf",
+      "hasOwnProperty",
+      "isPrototypeOf",
+      "propertyIsEnumerable",
+      "constructor",
+      "apply",
+      "call",
+      "bind",
+      "length",
+      "prototype",
+      "push",
+      "pop",
+      "concat",
+      "join",
+      "reverse",
+      "shift",
+      "slice",
+      "sort",
+      "splice",
+      "unshift",
+      "indexOf",
+      "lastIndexOf",
+      "every",
+      "some",
+      "forEach",
+      "map",
+      "filter",
+      "reduce",
+      "reduceRight",
+      "find",
+      "findIndex",
+      "fill",
+      "copyWithin",
+      "entries",
+      "keys",
+      "values",
+      "includes",
+      "flatMap",
+      "flat",
+      "at",
+      "findLast",
+      "findLastIndex",
+      "toReversed",
+      "toSorted",
+      "toSpliced",
+      "with",
+    ]);
+
     for (const prop of props) {
       const propName = prop.getName();
 
-      // Ensure we have a declaration before attempting to get the type at location.
-      // Synthetic properties (from Omit/Pick/Mapped types) might not have accessible declarations.
+      // Skip internal symbols (starts with __) and blocklisted methods
+      if (propName.startsWith("__") || propertyBlocklist.has(propName)) {
+        continue;
+      }
+
       const declaration =
         prop.valueDeclaration ||
         (prop.declarations && prop.declarations.length > 0
           ? prop.declarations[0]
           : undefined);
 
-      if (!declaration) {
-        // We cannot reliably determine context without a declaration node.
-        // We skip this property to avoid crashing.
-        continue;
-      }
+      if (!declaration) continue;
 
       const propType = this.typeChecker.getTypeOfSymbolAtLocation(
         prop,
         declaration,
       );
+
+      // Skip Functions/Methods
+      // If the property type has call signatures, it's a function (method)
+      if (propType.getCallSignatures().length > 0) {
+        continue;
+      }
+      // Double check: if type string is "Function" or similar
+      const typeStr = this.typeChecker.typeToString(propType);
+      if (typeStr === "Function" || typeStr.includes("=>")) {
+        continue;
+      }
 
       const isOptional = (prop.getFlags() & ts.SymbolFlags.Optional) !== 0;
       if (!isOptional) required.push(propName);
@@ -250,9 +324,14 @@ class SchemaBuilder {
   }
 
   private isArrayType(type: ts.Type): boolean {
+    // Check if it is a Tuple (e.g. [string, number])
+    if (this.typeChecker.isTupleType(type)) return true;
+
     const symbol = type.getSymbol();
     if (!symbol) return false;
-    return symbol.getName() === "Array";
+
+    const name = symbol.getName();
+    return name === "Array" || name === "ReadonlyArray";
   }
 }
 
