@@ -1,0 +1,74 @@
+{
+  "openapi": "3.0.0",
+  "info": {
+    "title": "Test API",
+    "version": "1.0.0"
+  },
+  "servers": [],
+  "paths": {
+    "/a/hello-from-a": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "parameters": [],
+        "tags": [
+          "A Handler Endpoint"
+        ],
+        "description": "A File Description"
+      }
+    },
+    "/a/b/hello-from-b": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "parameters": [],
+        "tags": []
+      }
+    },
+    "/b/hello-from-b": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "parameters": [],
+        "tags": []
+      }
+    },
+    "/b/a/hello-from-a": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "parameters": [],
+        "tags": [
+          "A Handler Endpoint"
+        ],
+        "description": "A File Description"
+      }
+    },
+    "/c/hello": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "parameters": [],
+        "tags": []
+      }
+    }
+  },
+  "components": {
+    "schemas": {}
+  }
+}
