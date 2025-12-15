@@ -1,0 +1,73 @@
+{
+  "openapi": "3.0.0",
+  "info": {
+    "title": "Test API",
+    "version": "1.0.0"
+  },
+  "servers": [],
+  "paths": {
+    "/hello-from-b": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "parameters": [],
+        "tags": []
+      }
+    },
+    "/hello-from-a": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "parameters": [],
+        "tags": [
+          "A Handler Endpoint"
+        ],
+        "description": "A File Description"
+      }
+    },
+    "/share-document": {
+      "post": {
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "parameters": [],
+        "tags": [
+          "Tag Handler Endpoint"
+        ],
+        "description": "Endpoint to share a document.",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "documentId": {
+                    "type": "string"
+                  },
+                  "userId": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "documentId",
+                  "userId"
+                ]
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {}
+  }
+}
