@@ -1,6 +1,6 @@
 {
   "name": "swagger-autogen-ast",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "A zero-config OpenAPI 3.0 generator for Express. The AST-based spiritual successor to swagger-autogen with automatic type inference.",
   "homepage": "https://github.com/anthfgreco/swagger-autogen-ast#readme",
   "bugs": {
@@ -34,7 +34,8 @@
   },
   "dependencies": {
     "ora": "^9.0.0",
-    "typescript": "^5.9.3"
+    "typescript": "^5.9.3",
+    "openapi-types": "^12.1.3"
   },
   "devDependencies": {
     "@types/express": "^5.0.6",
@@ -42,7 +43,6 @@
     "cross-env": "^10.1.0",
     "dotenv": "^17.2.3",
     "express": "^5.2.1",
-    "openapi-types": "^12.1.3",
     "prettier": "^3.7.4",
     "prettier-plugin-organize-imports": "^4.2.0",
     "vitest": "^4.0.15"
