@@ -1,6 +1,8 @@
 # swagger-autogen-ast
 
-A zero-config OpenAPI 3.0 generator for Express. The AST-based spiritual successor to `swagger-autogen` with automatic type inference.
+A zero-config OpenAPI 3.0 generator for Express.
+
+The AST-based spiritual successor to [swagger-autogen](https://www.npmjs.com/package/swagger-autogen), leveraging the TypeScript Compiler API for faster, more accurate schema generation.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.0-blue.svg)](https://www.typescriptlang.org/)
