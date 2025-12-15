@@ -12,6 +12,8 @@ export interface GeneratorOptions {
   tsconfigPath?: string;
   info?: OpenAPIV3.InfoObject;
   servers?: OpenAPIV3.ServerObject[];
+  security?: OpenAPIV3.SecurityRequirementObject[];
+  components?: OpenAPIV3.ComponentsObject;
 }
 
 class SchemaBuilder {
@@ -57,7 +59,6 @@ class SchemaBuilder {
     if (typeNodeString === "any") return {};
     if (typeNodeString === "void") return {};
     if (typeNodeString === "undefined" || typeNodeString === "null") {
-      // Logic preserved: using format: 'nullable' to satisfy existing tests
       return { type: "string", format: "nullable" };
     }
 
@@ -77,7 +78,7 @@ class SchemaBuilder {
       };
     }
 
-    // Handle Enums (Check flags instead of isEnum method)
+    // Handle Enums
     const flags = type.getFlags();
     if (flags & ts.TypeFlags.Enum || flags & ts.TypeFlags.EnumLiteral) {
       if (
@@ -398,37 +399,112 @@ class RouteAnalyzer {
     // Replace :param with {param}
     const openApiPath = fullPath.replace(/:([a-zA-Z0-9_]+)/g, "{$1}");
 
-    // Extract Handler
-    // We grab the last argument that looks like a function or identifier
-    const handlerArg = args[args.length - 1];
-    if (!handlerArg) return;
+    // Init Operation
+    if (!this.paths[openApiPath]) this.paths[openApiPath] = {};
+    const pathItem = this.paths[openApiPath]!;
 
-    // Resolve the actual handler definition (following imports)
-    const handlerNode = this.resolveHandlerNode(handlerArg);
+    const operation: OpenAPIV3.OperationObject = {
+      responses: {
+        "200": { description: "OK" },
+      },
+      parameters: [],
+      tags: [],
+    };
 
-    if (handlerNode) {
-      if (
-        ts.isFunctionExpression(handlerNode) ||
-        ts.isArrowFunction(handlerNode) ||
-        ts.isFunctionDeclaration(handlerNode)
-      ) {
-        this.addOperation(
-          openApiPath,
-          methodName as OpenAPIV3.HttpMethods,
-          handlerNode,
-          node,
-        );
+    // Extract Path Params
+    const pathParams = openApiPath.match(/{([^}]+)}/g);
+    if (pathParams) {
+      pathParams.forEach((p) => {
+        const paramName = p.replace(/[{}]/g, "");
+        this.addParameter(operation, paramName, "path", "string", true);
+      });
+    }
+
+    // Iterate through Middlewares + Handler
+    for (let i = 1; i < args.length; i++) {
+      const arg = args[i];
+      if (!arg) continue;
+
+      if (ts.isCallExpression(arg)) {
+        // Skip higher order functions for now to avoid complexity (ex. checkPermissions(...))
+        continue;
       }
+
+      const handlerNode = this.resolveHandlerNode(arg);
+      if (handlerNode) {
+        this.analyzeHandler(handlerNode, operation, node);
+      }
+    }
+
+    pathItem[methodName as OpenAPIV3.HttpMethods] = operation;
+  }
+
+  /**
+   * Analyzes a single function (middleware or final handler)
+   */
+  private analyzeHandler(
+    handler: ts.FunctionDeclaration | ts.FunctionExpression | ts.ArrowFunction,
+    operation: OpenAPIV3.OperationObject,
+    callNode: ts.CallExpression,
+  ) {
+    // Extract JSDoc from Call Node & Function Def
+    this.mergeMetadata(operation, this.extractJSDoc(callNode));
+    this.mergeMetadata(operation, this.extractJSDoc(handler));
+
+    // Scan Function Body for #swagger comments
+    if (handler.body && ts.isBlock(handler.body)) {
+      this.scanSwaggerComments(handler.body, operation);
+    }
+
+    // Detect Param Names (req, res)
+    const reqParam = handler.parameters[0];
+    const resParam = handler.parameters[1];
+    const reqName = reqParam?.name?.getText();
+    const resName = resParam?.name?.getText();
+
+    // Analyze Generics
+    if (reqParam) {
+      const reqType = this.checker.getTypeAtLocation(reqParam);
+
+      if ((reqType as any).typeArguments) {
+        const typeArgs = (reqType as any).typeArguments as ts.Type[];
+
+        // Index 2: Request Body
+        if (typeArgs[2]) {
+          const bodySchema = this.schemaBuilder.generateSchema(typeArgs[2]);
+          if (this.isValidSchema(bodySchema)) {
+            operation.requestBody = {
+              content: {
+                "application/json": { schema: bodySchema },
+              },
+            };
+          }
+        }
+
+        // Index 3: Query Params
+        if (typeArgs[3]) {
+          const queryProps = typeArgs[3].getProperties();
+          queryProps.forEach((prop) => {
+            const propName = prop.getName();
+            this.addParameter(operation, propName, "query", "string");
+          });
+        }
+      }
+    }
+
+    // Scan Body for Usage
+    if (handler.body) {
+      this.scanBodyUsage(handler.body, operation, reqName, resName);
     }
   }
 
   private resolvePathValue(node: ts.Node): string | undefined {
-    // 1. Literal string
+    // Literal string
     if (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node)) {
       return node.text;
     }
 
-    // 2. Variable / Constant
+    // Variable / Constant
     if (ts.isIdentifier(node)) {
       const type = this.checker.getTypeAtLocation(node);
       if (type.isStringLiteral()) {
@@ -497,7 +573,6 @@ class RouteAnalyzer {
           ) {
             return decl;
           }
-          // Handle: const handler = (req, res) => ...
           if (ts.isVariableDeclaration(decl) && decl.initializer) {
             if (
               ts.isArrowFunction(decl.initializer) ||
@@ -512,111 +587,30 @@ class RouteAnalyzer {
     return undefined;
   }
 
-  private addOperation(
-    routePath: string,
-    method: OpenAPIV3.HttpMethods,
-    handler: ts.FunctionDeclaration | ts.FunctionExpression | ts.ArrowFunction,
-    callNode: ts.CallExpression,
+  private addParameter(
+    operation: OpenAPIV3.OperationObject,
+    name: string,
+    location: "query" | "header" | "path" | "cookie",
+    type: "string" | "number" | "boolean",
+    required = false,
   ) {
-    if (!this.paths[routePath]) this.paths[routePath] = {};
-    const pathItem = this.paths[routePath];
+    if (!operation.parameters) operation.parameters = [];
 
-    if (!pathItem) return;
-
-    const operation: OpenAPIV3.OperationObject = {
-      responses: {
-        "200": { description: "OK" },
-      },
-      parameters: [],
-      tags: [],
-    };
-
-    // 1. Extract JSDoc from the `router.get(...)` call itself
-    const callJSDoc = this.extractJSDoc(callNode);
-    this.mergeMetadata(operation, callJSDoc);
-
-    // 2. Extract JSDoc from the handler function definition (follow imports)
-    const handlerJSDoc = this.extractJSDoc(handler);
-    this.mergeMetadata(operation, handlerJSDoc);
-
-    // 3. Scan Function Body for #swagger comments
-    if (handler.body && ts.isBlock(handler.body)) {
-      this.scanSwaggerComments(handler.body, operation);
+    // Avoid duplicates
+    if (
+      operation.parameters.some(
+        (p) => "name" in p && p.name === name && p.in === location,
+      )
+    ) {
+      return;
     }
 
-    // 4. Path Parameters
-    const pathParams = routePath.match(/{([^}]+)}/g);
-    if (pathParams) {
-      pathParams.forEach((p) => {
-        const paramName = p.replace(/[{}]/g, "");
-        if (
-          !operation.parameters!.some(
-            (ex) => "name" in ex && ex.name === paramName && ex.in === "path",
-          )
-        ) {
-          operation.parameters!.push({
-            name: paramName,
-            in: "path",
-            required: true,
-            schema: { type: "string" },
-          });
-        }
-      });
-    }
-
-    // 5. Types (Request<Params, Res, Body, Query>)
-    if (handler.parameters.length >= 2) {
-      const reqParam = handler.parameters[0];
-      if (!reqParam) return;
-      const reqType = this.checker.getTypeAtLocation(reqParam);
-
-      if ((reqType as any).typeArguments) {
-        const typeArgs = (reqType as any).typeArguments as ts.Type[];
-
-        // Index 2: Request Body
-        if (typeArgs[2]) {
-          const bodySchema = this.schemaBuilder.generateSchema(typeArgs[2]);
-          if (this.isValidSchema(bodySchema)) {
-            operation.requestBody = {
-              content: {
-                "application/json": { schema: bodySchema },
-              },
-            };
-          }
-        }
-
-        // Index 3: Query Params
-        if (typeArgs[3]) {
-          const queryProps = typeArgs[3].getProperties();
-          queryProps.forEach((prop) => {
-            const propName = prop.getName();
-            if (
-              !operation.parameters!.some(
-                (p) => "name" in p && p.name === propName && p.in === "query",
-              )
-            ) {
-              operation.parameters!.push({
-                name: propName,
-                in: "query",
-                schema: { type: "string" }, // Defaults to string, refinement hard without deep analysis
-              });
-            }
-          });
-        }
-      }
-    }
-
-    // 6. Analyze Function Body for usage (recursive)
-    if (handler.body) {
-      this.scanBodyUsage(
-        handler.body,
-        operation,
-        handler.parameters[0]?.name?.getText(),
-        handler.parameters[1]?.name?.getText(),
-      );
-    }
-
-    pathItem[method] = operation;
+    operation.parameters.push({
+      name,
+      in: location,
+      schema: { type },
+      required,
+    });
   }
 
   private isValidSchema(
@@ -645,128 +639,178 @@ class RouteAnalyzer {
     visited.add(node);
 
     const visit = (n: ts.Node) => {
-      // 1. Detect Response Status: res.status(404) or res.sendStatus(500)
+      // Detect Response Status
       if (resName && ts.isCallExpression(n)) {
         const propAccess = n.expression;
         if (ts.isPropertyAccessExpression(propAccess)) {
           const expressionText = propAccess.expression.getText();
           const methodText = propAccess.name.text;
 
-          // Check simple: res.sendStatus(code)
-          if (expressionText === resName && methodText === "sendStatus") {
-            const arg = n.arguments[0];
-            if (arg && ts.isNumericLiteral(arg)) {
-              this.addResponse(operation, arg.text);
-            }
-          }
-
-          // Check chain: res.status(code)
-          if (expressionText === resName && methodText === "status") {
-            const arg = n.arguments[0];
-            if (arg && ts.isNumericLiteral(arg)) {
-              this.addResponse(operation, arg.text);
-            }
-          }
-
-          // Check response body: res.json(data) or res.send(data)
-          if (
-            (methodText === "json" || methodText === "send") &&
-            n.arguments.length > 0
-          ) {
-            const arg = n.arguments[0];
-            if (arg) {
-              const responseType = this.checker.getTypeAtLocation(arg);
-              const schema = this.schemaBuilder.generateSchema(responseType);
-
-              if (!operation.responses["200"]) {
-                operation.responses["200"] = { description: "OK" };
+          if (expressionText === resName) {
+            // res.sendStatus(code) or res.status(code)
+            if (methodText === "sendStatus" || methodText === "status") {
+              const arg = n.arguments[0];
+              if (arg && ts.isNumericLiteral(arg)) {
+                this.addResponse(operation, arg.text);
               }
+            }
 
-              const successResponse = operation.responses[
-                "200"
-              ] as OpenAPIV3.ResponseObject;
+            // res.json(data) or res.send(data)
+            if (
+              (methodText === "json" || methodText === "send") &&
+              n.arguments.length > 0
+            ) {
+              const arg = n.arguments[0];
+              if (arg) {
+                const responseType = this.checker.getTypeAtLocation(arg);
+                const schema = this.schemaBuilder.generateSchema(responseType);
 
-              if (!successResponse.content) {
-                successResponse.content = {
-                  "application/json": { schema },
-                };
+                if (!operation.responses["200"]) {
+                  operation.responses["200"] = { description: "OK" };
+                }
+
+                const successResponse = operation.responses[
+                  "200"
+                ] as OpenAPIV3.ResponseObject;
+
+                if (!successResponse.content) {
+                  successResponse.content = {
+                    "application/json": { schema },
+                  };
+                }
               }
             }
           }
         }
       }
 
-      // 2. Handle Casts: const body = req.body as Type; including chained `as` expressions
+      // Handle Casts (req.body as Type, req.headers as Type)
       if (ts.isAsExpression(n) || ts.isTypeAssertionExpression(n)) {
-        // Determine the effective type node (the one after the outermost `as`)
         let typeNode: ts.TypeNode | undefined = n.type;
-        // Walk down nested as-expressions to find the underlying expression
         let expr: ts.Expression = n.expression;
         while (ts.isAsExpression(expr) || ts.isTypeAssertionExpression(expr)) {
           expr = expr.expression;
         }
 
-        if (ts.isPropertyAccessExpression(expr)) {
-          // req.body as Type
-          if (
-            reqName &&
-            expr.expression.getText() === reqName &&
-            expr.name.text === "body"
-          ) {
-            let schema: OpenAPIV3.SchemaObject | OpenAPIV3.ReferenceObject = {};
-            try {
-              const t = typeNode
-                ? this.checker.getTypeFromTypeNode(typeNode)
-                : this.checker.getTypeAtLocation(n);
-              schema = this.schemaBuilder.generateSchema(t);
-            } catch (e) {
-              schema = this.schemaBuilder.generateSchema(n.type as any);
+        if (ts.isPropertyAccessExpression(expr) && reqName) {
+          if (expr.expression.getText() === reqName) {
+            // req.body as Type
+            if (expr.name.text === "body") {
+              let schema: OpenAPIV3.SchemaObject | OpenAPIV3.ReferenceObject =
+                {};
+              try {
+                const t = typeNode
+                  ? this.checker.getTypeFromTypeNode(typeNode)
+                  : this.checker.getTypeAtLocation(n);
+                schema = this.schemaBuilder.generateSchema(t);
+              } catch (e) {
+                schema = this.schemaBuilder.generateSchema(n.type as any);
+              }
+              if (this.isValidSchema(schema)) {
+                operation.requestBody = {
+                  content: { "application/json": { schema: schema } },
+                };
+              }
             }
-            if (this.isValidSchema(schema)) {
-              operation.requestBody = {
-                content: { "application/json": { schema: schema } },
-              };
+
+            // req.query as Type
+            if (expr.name.text === "query") {
+              let queryType: ts.Type | undefined;
+              if (typeNode) {
+                try {
+                  queryType = this.checker.getTypeFromTypeNode(typeNode);
+                } catch (e) {
+                  queryType = this.checker.getTypeAtLocation(n.type);
+                }
+              } else {
+                queryType = this.checker.getTypeAtLocation(n);
+              }
+
+              if (queryType) {
+                const props = queryType.getProperties();
+                props.forEach((prop) => {
+                  this.addParameter(
+                    operation,
+                    prop.getName(),
+                    "query",
+                    "string",
+                  );
+                });
+              }
+            }
+
+            // req.headers as Type
+            if (expr.name.text === "headers") {
+              let headerType: ts.Type | undefined;
+              if (typeNode) {
+                try {
+                  headerType = this.checker.getTypeFromTypeNode(typeNode);
+                } catch (e) {
+                  headerType = this.checker.getTypeAtLocation(n.type);
+                }
+              } else {
+                headerType = this.checker.getTypeAtLocation(n);
+              }
+
+              if (headerType) {
+                const props = headerType.getProperties();
+                props.forEach((prop) => {
+                  const pName = prop.getName();
+                  if (
+                    pName.toLowerCase() !== "authorization" &&
+                    pName.toLowerCase() !== "content-type"
+                  ) {
+                    this.addParameter(operation, pName, "header", "string");
+                  }
+                });
+              }
             }
           }
+        }
+      }
 
-          // req.query as Type (support chained as: req.query as unknown as MyQuery)
-          if (
-            reqName &&
-            expr.expression.getText() === reqName &&
-            expr.name.text === "query"
-          ) {
-            let queryType: ts.Type | undefined;
-            if (typeNode) {
-              try {
-                queryType = this.checker.getTypeFromTypeNode(typeNode);
-              } catch (e) {
-                queryType = this.checker.getTypeAtLocation(n.type);
-              }
-            } else {
-              queryType = this.checker.getTypeAtLocation(n);
+      // Detect direct header access
+      // Case: req.headers['x-key'] or req.headers.key
+      if (
+        (ts.isElementAccessExpression(n) || ts.isPropertyAccessExpression(n)) &&
+        reqName
+      ) {
+        const expression = n.expression;
+        if (
+          ts.isPropertyAccessExpression(expression) &&
+          expression.expression.getText() === reqName &&
+          expression.name.text === "headers"
+        ) {
+          let headerName: string | undefined;
+          if (ts.isElementAccessExpression(n)) {
+            if (ts.isStringLiteral(n.argumentExpression)) {
+              headerName = n.argumentExpression.text;
             }
+          } else {
+            headerName = n.name.text;
+          }
 
-            if (queryType) {
-              const props = queryType.getProperties();
-              props.forEach((prop) => {
-                const propName = prop.getName();
-                if (
-                  !operation.parameters!.some(
-                    (p) =>
-                      "name" in p && p.name === propName && p.in === "query",
-                  )
-                ) {
-                  operation.parameters!.push({
-                    name: propName,
-                    in: "query",
-                    schema: { type: "string" },
-                    required: !(
-                      (prop.getFlags() & ts.SymbolFlags.Optional) !==
-                      0
-                    ),
-                  });
+          if (headerName && headerName.toLowerCase() !== "content-type") {
+            this.addParameter(operation, headerName, "header", "string");
+          }
+        }
+      }
+
+      // Case: req.header('x-key') or req.get('x-key')
+      if (ts.isCallExpression(n) && reqName) {
+        if (ts.isPropertyAccessExpression(n.expression)) {
+          if (n.expression.expression.getText() === reqName) {
+            const method = n.expression.name.text;
+            if (
+              (method === "header" || method === "get") &&
+              n.arguments.length > 0
+            ) {
+              const arg = n.arguments[0];
+              if (arg && ts.isStringLiteral(arg)) {
+                if (arg.text.toLowerCase() !== "content-type") {
+                  this.addParameter(operation, arg.text, "header", "string");
                 }
-              });
+              }
             }
           }
         }
@@ -834,7 +878,6 @@ class RouteAnalyzer {
       try {
         const value = new Function(`return ${valueStr}`)();
         if (keyPath === "tags") {
-          // Merge tags instead of replacing so JSDoc + inline tags both apply
           const existing = operation.tags || [];
           if (Array.isArray(value)) {
             operation.tags = Array.from(new Set([...existing, ...value]));
@@ -867,7 +910,9 @@ class RouteAnalyzer {
   private mergeMetadata(op: OpenAPIV3.OperationObject, meta: any) {
     if (meta.summary) op.summary = meta.summary;
     if (meta.description) op.description = meta.description;
-    if (meta.tags && meta.tags.length) op.tags = meta.tags;
+    if (meta.tags && meta.tags.length) {
+      op.tags = Array.from(new Set([...(op.tags || []), ...meta.tags]));
+    }
     if (meta.deprecated) op.deprecated = true;
     if (meta.operationId) op.operationId = meta.operationId;
   }
@@ -875,12 +920,10 @@ class RouteAnalyzer {
   private extractJSDoc(node: ts.Node) {
     let tags = ts.getJSDocTags(node);
 
-    // If no tags on the node, check the parent (ExpressionStatement or VariableDeclaration)
     if (tags.length === 0) {
       if (node.parent && ts.isExpressionStatement(node.parent)) {
         tags = ts.getJSDocTags(node.parent);
       } else if (node.parent && ts.isVariableDeclaration(node.parent)) {
-        // Handle const handler = () => {}
         if (
           node.parent.parent &&
           ts.isVariableDeclarationList(node.parent.parent)
@@ -919,6 +962,9 @@ export function generateOpenApi(options: GeneratorOptions) {
   const analyzer = new RouteAnalyzer(options);
   const { paths, schemas } = analyzer.analyze(options.entryFile);
 
+  // Merge generated schemas with user provided components
+  const finalSchemas = { ...schemas, ...(options.components?.schemas || {}) };
+
   const doc: OpenAPIV3.Document = {
     openapi: "3.0.0",
     info: options.info || {
@@ -926,9 +972,12 @@ export function generateOpenApi(options: GeneratorOptions) {
       version: "1.0.0",
     },
     servers: options.servers || [],
+    security: options.security || [],
     paths: paths,
     components: {
-      schemas: schemas,
+      ...options.components,
+      schemas: finalSchemas,
+      securitySchemes: options.components?.securitySchemes || {},
     },
   };
 

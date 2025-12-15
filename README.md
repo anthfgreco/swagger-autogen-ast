@@ -52,6 +52,15 @@ generateOpenApi({
     title: "My API",
     version: "1.0.0",
   },
+  components: {
+    securitySchemes: {
+      bearerAuth: {
+        type: "http",
+        scheme: "bearer",
+      },
+    },
+  },
+  security: [{ bearerAuth: [] }],
   servers: [{ url: "http://localhost:3000", description: "Local server" }],
 });
 ```
@@ -100,6 +109,27 @@ router.get("/admin", async (req, res) => {
   const data: DashboardData = await getData();
   return res.json(data); // -> 200 OK (application/json with DashboardData schema)
 });
+```
+
+### 3. Headers
+
+It detects direct access and type assertions on `req.headers`.
+
+```typescript
+router.get("/protected", (req, res) => {
+  // Automatically adds "x-api-key" (header) to parameters
+  const apiKey = req.headers["x-api-key"];
+
+  // Supports standard methods
+  const auth = req.header("Authorization");
+});
+```
+
+### 4. Middleware Chains
+
+```typescript
+// Infers 403 from authMiddleware, 400 from validation, and 200 from the handler
+router.post("/users", authMiddleware, validationMiddleware, createUserHandler);
 ```
 
 ## Overrides
