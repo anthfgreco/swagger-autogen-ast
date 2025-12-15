@@ -5,6 +5,7 @@
     "version": "1.0.0"
   },
   "servers": [],
+  "security": [],
   "paths": {
     "/comments": {
       "post": {
@@ -58,6 +59,7 @@
           "replies"
         ]
       }
-    }
+    },
+    "securitySchemes": {}
   }
 }

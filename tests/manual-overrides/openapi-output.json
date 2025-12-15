@@ -5,6 +5,7 @@
     "version": "1.0.0"
   },
   "servers": [],
+  "security": [],
   "paths": {
     "/upload": {
       "post": {
@@ -28,6 +29,7 @@
     }
   },
   "components": {
-    "schemas": {}
+    "schemas": {},
+    "securitySchemes": {}
   }
 }

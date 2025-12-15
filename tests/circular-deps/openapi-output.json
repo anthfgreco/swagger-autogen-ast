@@ -5,6 +5,7 @@
     "version": "1.0.0"
   },
   "servers": [],
+  "security": [],
   "paths": {
     "/a/hello": {
       "get": {
@@ -44,6 +45,7 @@
     }
   },
   "components": {
-    "schemas": {}
+    "schemas": {},
+    "securitySchemes": {}
   }
 }

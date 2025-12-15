@@ -5,31 +5,13 @@
     "version": "1.0.0"
   },
   "servers": [],
+  "security": [],
   "paths": {
     "/create": {
       "post": {
         "responses": {
           "200": {
-            "description": "OK",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "username": {
-                      "type": "string"
-                    },
-                    "email": {
-                      "type": "string"
-                    }
-                  },
-                  "required": [
-                    "username",
-                    "email"
-                  ]
-                }
-              }
-            }
+            "description": "OK"
           },
           "201": {
             "description": "Created"
@@ -67,6 +49,7 @@
     }
   },
   "components": {
-    "schemas": {}
+    "schemas": {},
+    "securitySchemes": {}
   }
 }

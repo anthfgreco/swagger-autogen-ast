@@ -5,6 +5,7 @@
     "version": "1.0.0"
   },
   "servers": [],
+  "security": [],
   "paths": {
     "/tuple": {
       "post": {
@@ -50,6 +51,7 @@
           "tags"
         ]
       }
-    }
+    },
+    "securitySchemes": {}
   }
 }

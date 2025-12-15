@@ -5,6 +5,7 @@
     "version": "1.0.0"
   },
   "servers": [],
+  "security": [],
   "paths": {
     "/user": {
       "post": {
@@ -113,6 +114,7 @@
           "metadata"
         ]
       }
-    }
+    },
+    "securitySchemes": {}
   }
 }

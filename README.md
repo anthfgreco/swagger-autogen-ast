@@ -146,6 +146,7 @@ router.post("/upload", (req, res) => {
   // #swagger.summary = "Upload file"
   // #swagger.description = "Multipart upload only"
   // #swagger.deprecated = true
+  // #swagger.security = [{ "bearerAuth": [] }]
 
   res.status(200).send();
 });

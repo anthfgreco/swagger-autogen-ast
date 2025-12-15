@@ -5,19 +5,13 @@
     "version": "1.0.0"
   },
   "servers": [],
+  "security": [],
   "paths": {
     "/status-check": {
       "get": {
         "responses": {
           "200": {
-            "description": "OK",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object"
-                }
-              }
-            }
+            "description": "OK"
           },
           "400": {
             "description": "Bad Request"
@@ -35,18 +29,7 @@
     }
   },
   "components": {
-    "schemas": {
-      "__object": {
-        "type": "object",
-        "properties": {
-          "status": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "status"
-        ]
-      }
-    }
+    "schemas": {},
+    "securitySchemes": {}
   }
 }

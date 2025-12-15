@@ -5,6 +5,7 @@
     "version": "1.0.0"
   },
   "servers": [],
+  "security": [],
   "paths": {
     "/class": {
       "post": {
@@ -44,6 +45,7 @@
           "age"
         ]
       }
-    }
+    },
+    "securitySchemes": {}
   }
 }

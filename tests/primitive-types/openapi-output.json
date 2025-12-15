@@ -5,6 +5,7 @@
     "version": "1.0.0"
   },
   "servers": [],
+  "security": [],
   "paths": {
     "/primitives": {
       "post": {
@@ -50,6 +51,7 @@
           "empty"
         ]
       }
-    }
+    },
+    "securitySchemes": {}
   }
 }

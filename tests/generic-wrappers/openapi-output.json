@@ -5,6 +5,7 @@
     "version": "1.0.0"
   },
   "servers": [],
+  "security": [],
   "paths": {
     "/user": {
       "post": {
@@ -75,6 +76,7 @@
           "email"
         ]
       }
-    }
+    },
+    "securitySchemes": {}
   }
 }

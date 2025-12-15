@@ -5,6 +5,7 @@
     "version": "1.0.0"
   },
   "servers": [],
+  "security": [],
   "paths": {
     "/api/v1/users/{id}": {
       "get": {
@@ -24,10 +25,10 @@
           {
             "name": "id",
             "in": "path",
-            "required": true,
             "schema": {
               "type": "string"
-            }
+            },
+            "required": true
           }
         ],
         "tags": []
@@ -53,6 +54,7 @@
     }
   },
   "components": {
-    "schemas": {}
+    "schemas": {},
+    "securitySchemes": {}
   }
 }

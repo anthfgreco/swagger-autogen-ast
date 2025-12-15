@@ -5,6 +5,7 @@
     "version": "1.0.0"
   },
   "servers": [],
+  "security": [],
   "paths": {
     "/users/{id}": {
       "put": {
@@ -24,10 +25,10 @@
           {
             "name": "id",
             "in": "path",
-            "required": true,
             "schema": {
               "type": "string"
-            }
+            },
+            "required": true
           }
         ],
         "tags": [],
@@ -56,6 +57,7 @@
           }
         }
       }
-    }
+    },
+    "securitySchemes": {}
   }
 }

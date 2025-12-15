@@ -5,6 +5,7 @@
     "version": "1.0.0"
   },
   "servers": [],
+  "security": [],
   "paths": {
     "/share-document": {
       "post": {
@@ -51,14 +52,7 @@
       "post": {
         "responses": {
           "200": {
-            "description": "OK",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/__object"
-                }
-              }
-            }
+            "description": "OK"
           },
           "204": {
             "description": "No Content"
@@ -97,18 +91,7 @@
     }
   },
   "components": {
-    "schemas": {
-      "__object": {
-        "type": "object",
-        "properties": {
-          "error": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "error"
-        ]
-      }
-    }
+    "schemas": {},
+    "securitySchemes": {}
   }
 }
