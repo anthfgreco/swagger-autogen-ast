@@ -31,7 +31,7 @@
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "bin": {
-    "swagger-autogen-ast": "./dist/index.js"
+    "swagger-autogen-ast": "dist/index.js"
   },
   "files": [
     "dist",
