@@ -1,0 +1,44 @@
+{
+  "openapi": "3.0.0",
+  "info": {
+    "title": "Test API",
+    "version": "1.0.0"
+  },
+  "servers": [],
+  "paths": {
+    "/api/v1/users/{id}": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "tags": []
+      }
+    },
+    "/api/v1/users/": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "parameters": [],
+        "tags": []
+      }
+    }
+  },
+  "components": {
+    "schemas": {}
+  }
+}
