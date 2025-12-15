@@ -4,6 +4,8 @@
 
 This is the AST-based successor to [swagger-autogen](https://www.npmjs.com/package/swagger-autogen). It uses the TypeScript Compiler API to statically analyze your routes, types, and controller logic to generate a spec that matches your code.
 
+Intended for use with [swagger-ui-react](https://www.npmjs.com/package/swagger-ui-react) and/or importing to [Postman](https://www.postman.com/).
+
 [![npm](https://img.shields.io/npm/v/swagger-autogen-ast)](https://www.npmjs.com/package/swagger-autogen-ast)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 

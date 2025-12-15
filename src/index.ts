@@ -16,6 +16,17 @@ export interface GeneratorOptions {
   components?: OpenAPIV3.ComponentsObject;
 }
 
+// Helper to find tsconfig up the directory tree
+const findTsConfig = (startDir: string): string | undefined => {
+  let dir = startDir;
+  while (dir !== path.parse(dir).root) {
+    const tsconfig = path.join(dir, "tsconfig.json");
+    if (fs.existsSync(tsconfig)) return tsconfig;
+    dir = path.dirname(dir);
+  }
+  return undefined;
+};
+
 class SchemaBuilder {
   private typeChecker: ts.TypeChecker;
   public definitions: Record<
@@ -293,7 +304,9 @@ class RouteAnalyzer {
           esModuleInterop: true,
         };
 
-    console.log(`Using TS Config: ${options.tsconfigPath || "Default"}`);
+    console.log(
+      `Using TS Config: ${options.tsconfigPath || "Default (None provided)"}`,
+    );
 
     // createProgram will resolve imported files automatically
     this.program = ts.createProgram([options.entryFile], compilerOptions);
@@ -953,8 +966,14 @@ class RouteAnalyzer {
 }
 
 export function generateOpenApi(options: GeneratorOptions) {
-  if (!fs.existsSync(options.entryFile)) {
+  const absoluteEntry = path.resolve(process.cwd(), options.entryFile);
+  if (!fs.existsSync(absoluteEntry)) {
     throw new Error(`Entry file not found: ${options.entryFile}`);
+  }
+
+  // Auto-discover tsconfig if not provided
+  if (!options.tsconfigPath) {
+    options.tsconfigPath = findTsConfig(path.dirname(absoluteEntry));
   }
 
   console.log("Analyzing AST...");
@@ -1000,16 +1019,6 @@ const isMain = () => {
   return false;
 };
 
-const findTsConfig = (startDir: string): string | undefined => {
-  let dir = startDir;
-  while (dir !== path.parse(dir).root) {
-    const tsconfig = path.join(dir, "tsconfig.json");
-    if (fs.existsSync(tsconfig)) return tsconfig;
-    dir = path.dirname(dir);
-  }
-  return undefined;
-};
-
 if (isMain()) {
   const args = process.argv.slice(2);
   if (args.length < 2) {
@@ -1022,14 +1031,14 @@ if (isMain()) {
   const entryFile = path.resolve(process.cwd(), args[0]!);
   const outputFile = path.resolve(process.cwd(), args[1]!);
 
-  let tsconfigPath = args[2] ? path.resolve(process.cwd(), args[2]) : undefined;
-  if (!tsconfigPath) {
-    tsconfigPath = findTsConfig(path.dirname(entryFile));
-  }
+  const tsconfigPath = args[2]
+    ? path.resolve(process.cwd(), args[2])
+    : undefined;
 
   const options: GeneratorOptions = {
     entryFile,
     outputFile,
+    tsconfigPath,
     info: {
       title: "My API",
       version: "1.0.0",
@@ -1037,10 +1046,6 @@ if (isMain()) {
     },
     servers: [{ url: "http://localhost:3000" }],
   };
-
-  if (tsconfigPath) {
-    options.tsconfigPath = tsconfigPath;
-  }
 
   try {
     generateOpenApi(options);
