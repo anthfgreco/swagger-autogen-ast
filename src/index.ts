@@ -749,16 +749,32 @@ class RouteAnalyzer {
         }
       }
 
-      // 2. Handle Casts: const body = req.body as Type;
+      // 2. Handle Casts: const body = req.body as Type; including chained `as` expressions
       if (ts.isAsExpression(n) || ts.isTypeAssertionExpression(n)) {
-        if (ts.isPropertyAccessExpression(n.expression)) {
+        // Determine the effective type node (the one after the outermost `as`)
+        let typeNode: ts.TypeNode | undefined = n.type;
+        // Walk down nested as-expressions to find the underlying expression
+        let expr: ts.Expression = n.expression;
+        while (ts.isAsExpression(expr) || ts.isTypeAssertionExpression(expr)) {
+          expr = expr.expression;
+        }
+
+        if (ts.isPropertyAccessExpression(expr)) {
           // req.body as Type
           if (
             reqName &&
-            n.expression.expression.getText() === reqName &&
-            n.expression.name.text === "body"
+            expr.expression.getText() === reqName &&
+            expr.name.text === "body"
           ) {
-            const schema = this.schemaBuilder.generateSchema(n.type);
+            let schema: SchemaObject = {};
+            try {
+              const t = typeNode
+                ? this.checker.getTypeFromTypeNode(typeNode)
+                : this.checker.getTypeAtLocation(n);
+              schema = this.schemaBuilder.generateSchema(t);
+            } catch (e) {
+              schema = this.schemaBuilder.generateSchema(n.type as any);
+            }
             if (this.isValidSchema(schema)) {
               operation.requestBody = {
                 content: { "application/json": { schema: schema } },
@@ -766,32 +782,41 @@ class RouteAnalyzer {
             }
           }
 
-          // req.query as Type
+          // req.query as Type (support chained as: req.query as unknown as MyQuery)
           if (
             reqName &&
-            n.expression.expression.getText() === reqName &&
-            n.expression.name.text === "query"
+            expr.expression.getText() === reqName &&
+            expr.name.text === "query"
           ) {
-            const queryType = this.checker.getTypeAtLocation(n.type);
-            const props = queryType.getProperties();
-            props.forEach((prop) => {
-              const propName = prop.getName();
-              if (
-                !operation.parameters!.some(
-                  (p) => p.name === propName && p.in === "query",
-                )
-              ) {
-                operation.parameters!.push({
-                  name: propName,
-                  in: "query",
-                  schema: { type: "string" },
-                  required: !(
-                    (prop.getFlags() & ts.SymbolFlags.Optional) !==
-                    0
-                  ),
-                });
+            let queryType: ts.Type | undefined;
+            if (typeNode) {
+              try {
+                queryType = this.checker.getTypeFromTypeNode(typeNode);
+              } catch (e) {
+                queryType = this.checker.getTypeAtLocation(n.type);
               }
-            });
+            } else {
+              queryType = this.checker.getTypeAtLocation(n);
+            }
+
+            if (queryType) {
+              const props = queryType.getProperties();
+              props.forEach((prop) => {
+                const propName = prop.getName();
+                if (
+                  !operation.parameters!.some(
+                    (p) => p.name === propName && p.in === "query",
+                  )
+                ) {
+                  operation.parameters!.push({
+                    name: propName,
+                    in: "query",
+                    schema: { type: "string" },
+                    required: !((prop.getFlags() & ts.SymbolFlags.Optional) !== 0),
+                  });
+                }
+              });
+            }
           }
         }
       }
@@ -851,8 +876,15 @@ class RouteAnalyzer {
 
       try {
         const value = new Function(`return ${valueStr}`)();
-        if (keyPath === "tags") operation.tags = value;
-        else if (keyPath === "description") operation.description = value;
+        if (keyPath === "tags") {
+          // Merge tags instead of replacing so JSDoc + inline tags both apply
+          const existing = operation.tags || [];
+          if (Array.isArray(value)) {
+            operation.tags = Array.from(new Set([...existing, ...value]));
+          } else if (typeof value === "string") {
+            operation.tags = Array.from(new Set([...existing, value]));
+          }
+        } else if (keyPath === "description") operation.description = value;
         else if (keyPath === "summary") operation.summary = value;
         else if (keyPath === "deprecated") operation.deprecated = !!value;
         else if (keyPath === "operationId") operation.operationId = value;
