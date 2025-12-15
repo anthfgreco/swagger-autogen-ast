@@ -116,15 +116,29 @@ class SchemaBuilder {
   private typeToSchema(type: ts.Type, depth = 0): SchemaObject {
     if (depth > 10) return {};
 
+    // Unwrap Promise<T> to T
+    const unwrappedPromise = this.unwrapPromise(type);
+    if (unwrappedPromise) {
+      return this.typeToSchema(unwrappedPromise, depth);
+    }
+
     const typeNodeString = this.typeChecker.typeToString(type);
 
+    // Primitives
     if (typeNodeString === "string") return { type: "string" };
     if (typeNodeString === "number") return { type: "number" };
     if (typeNodeString === "boolean") return { type: "boolean" };
     if (typeNodeString === "any") return {};
     if (typeNodeString === "void") return {};
-    if (typeNodeString === "undefined" || typeNodeString === "null")
+    if (typeNodeString === "undefined" || typeNodeString === "null") {
       return { type: "string", format: "nullable" };
+    }
+
+    // Handle Date objects explicitly
+    const symbol = type.getSymbol();
+    if (symbol && symbol.getName() === "Date") {
+      return { type: "string", format: "date-time" };
+    }
 
     // Handle Arrays
     if (this.isArrayType(type)) {
@@ -134,6 +148,32 @@ class SchemaBuilder {
         type: "array",
         items: elementType ? this.typeToSchema(elementType, depth + 1) : {},
       };
+    }
+
+    // Handle Enums (Check flags instead of isEnum method)
+    const flags = type.getFlags();
+    if (flags & ts.TypeFlags.Enum || flags & ts.TypeFlags.EnumLiteral) {
+      if (
+        symbol &&
+        symbol.valueDeclaration &&
+        ts.isEnumDeclaration(symbol.valueDeclaration)
+      ) {
+        const enumValues: (string | number)[] = [];
+        symbol.valueDeclaration.members.forEach((member) => {
+          if (member.initializer) {
+            if (ts.isStringLiteral(member.initializer)) {
+              enumValues.push(member.initializer.text);
+            } else if (ts.isNumericLiteral(member.initializer)) {
+              enumValues.push(Number(member.initializer.text));
+            }
+          }
+        });
+
+        if (enumValues.length > 0) {
+          const isString = typeof enumValues[0] === "string";
+          return { type: isString ? "string" : "number", enum: enumValues };
+        }
+      }
     }
 
     // Handle Unions
@@ -161,9 +201,9 @@ class SchemaBuilder {
       type.aliasSymbol ||
       type.getFlags() & ts.TypeFlags.Object
     ) {
-      const symbol = type.getSymbol() || type.aliasSymbol;
-      if (symbol) {
-        const name = symbol.getName();
+      const objectSymbol = type.getSymbol() || type.aliasSymbol;
+      if (objectSymbol) {
+        const name = objectSymbol.getName();
 
         // Treat complex library types as generic objects to prevent recursion hell
         if (
@@ -171,7 +211,9 @@ class SchemaBuilder {
           name === "CSSProperties" ||
           name === "ReactPortal" ||
           name === "Element" || // DOM Element
-          name === "HTMLElement"
+          name === "HTMLElement" ||
+          name === "Buffer" ||
+          name === "Readable"
         ) {
           return { type: "object", description: name };
         }
@@ -194,16 +236,6 @@ class SchemaBuilder {
           this.definitions[name] = {};
           const definition = this.extractObjectDefinition(type, depth);
 
-          // Clean up empty definition if it was just an alias wrapper
-          if (
-            !definition.properties &&
-            !definition.allOf &&
-            !definition.anyOf &&
-            definition.type === "object"
-          ) {
-            // Keep empty objects only if intended, but often these are alias artifacts
-          }
-
           this.definitions[name] = definition;
           return { $ref: `#/components/schemas/${name}` };
         }
@@ -218,63 +250,11 @@ class SchemaBuilder {
     const properties: Record<string, SchemaObject> = {};
     const required: string[] = [];
 
-    // Blocklist for standard Object/Array prototype methods
-    const propertyBlocklist = new Set([
-      "toString",
-      "toLocaleString",
-      "valueOf",
-      "hasOwnProperty",
-      "isPrototypeOf",
-      "propertyIsEnumerable",
-      "constructor",
-      "apply",
-      "call",
-      "bind",
-      "length",
-      "prototype",
-      "push",
-      "pop",
-      "concat",
-      "join",
-      "reverse",
-      "shift",
-      "slice",
-      "sort",
-      "splice",
-      "unshift",
-      "indexOf",
-      "lastIndexOf",
-      "every",
-      "some",
-      "forEach",
-      "map",
-      "filter",
-      "reduce",
-      "reduceRight",
-      "find",
-      "findIndex",
-      "fill",
-      "copyWithin",
-      "entries",
-      "keys",
-      "values",
-      "includes",
-      "flatMap",
-      "flat",
-      "at",
-      "findLast",
-      "findLastIndex",
-      "toReversed",
-      "toSorted",
-      "toSpliced",
-      "with",
-    ]);
-
     for (const prop of props) {
       const propName = prop.getName();
 
-      // Skip internal symbols (starts with __) and blocklisted methods
-      if (propName.startsWith("__") || propertyBlocklist.has(propName)) {
+      // Skip internal symbols
+      if (propName.startsWith("__")) {
         continue;
       }
 
@@ -286,17 +266,30 @@ class SchemaBuilder {
 
       if (!declaration) continue;
 
+      // Check parent symbol to exclude standard Object methods (toString, valueOf, etc.)
+      // We look at the declaration's parent (Interface/Class Declaration)
+      if (declaration.parent) {
+        const parentNode = declaration.parent;
+        if (
+          ts.isInterfaceDeclaration(parentNode) ||
+          ts.isClassDeclaration(parentNode)
+        ) {
+          const parentName = parentNode.name?.text;
+          if (parentName === "Object" || parentName === "Function") {
+            continue;
+          }
+        }
+      }
+
       const propType = this.typeChecker.getTypeOfSymbolAtLocation(
         prop,
         declaration,
       );
 
       // Skip Functions/Methods
-      // If the property type has call signatures, it's a function (method)
       if (propType.getCallSignatures().length > 0) {
         continue;
       }
-      // Double check: if type string is "Function" or similar
       const typeStr = this.typeChecker.typeToString(propType);
       if (typeStr === "Function" || typeStr.includes("=>")) {
         continue;
@@ -324,14 +317,22 @@ class SchemaBuilder {
   }
 
   private isArrayType(type: ts.Type): boolean {
-    // Check if it is a Tuple (e.g. [string, number])
     if (this.typeChecker.isTupleType(type)) return true;
-
     const symbol = type.getSymbol();
     if (!symbol) return false;
-
     const name = symbol.getName();
     return name === "Array" || name === "ReadonlyArray";
+  }
+
+  private unwrapPromise(type: ts.Type): ts.Type | null {
+    const symbol = type.getSymbol();
+    if (symbol && symbol.getName() === "Promise") {
+      const typeArgs = (type as any).typeArguments;
+      if (typeArgs && typeArgs.length > 0) {
+        return typeArgs[0];
+      }
+    }
+    return null;
   }
 }
 
@@ -381,7 +382,6 @@ class RouteAnalyzer {
   }
 
   public analyze(entryFile: string) {
-    // Start with entry file
     const entrySourceFile = this.program.getSourceFile(entryFile);
     if (!entrySourceFile) {
       throw new Error("Entry file not found in program.");
@@ -414,59 +414,27 @@ class RouteAnalyzer {
 
     const methodName = propAccess.name.text.toLowerCase();
     const args = node.arguments;
-    if (args.length < 2) return; // Need at least (path, handler)
+    if (args.length < 2) return;
 
     // Handle router.use()
     if (methodName === "use") {
       const pathArg = args[0];
-      const handlerArg = args[1]; // Expected to be the imported router
+      const handlerArg = args[1];
 
       if (!pathArg || !handlerArg) return;
 
-      // Extract the prefix path (e.g. "/tagsInFunction")
-      let usePath = "/";
-      if (
-        ts.isStringLiteral(pathArg) ||
-        ts.isNoSubstitutionTemplateLiteral(pathArg)
-      ) {
-        usePath = pathArg.text;
-      }
+      const usePath = this.resolvePathValue(pathArg) || "/";
 
-      // Resolve the handler symbol to find the file it comes from
-      let symbol = this.checker.getSymbolAtLocation(handlerArg);
-      if (symbol) {
-        if (symbol.flags & ts.SymbolFlags.Alias) {
-          symbol = this.checker.getAliasedSymbol(symbol);
-        }
+      // Follow the router import
+      const targetSourceFile = this.resolveHandlerSourceFile(handlerArg);
+      if (targetSourceFile) {
+        const fileName = targetSourceFile.fileName;
 
-        // Find the Declaration of that symbol
-        const decl = symbol.declarations?.[0];
-        if (decl) {
-          // Get the SourceFile where that router is defined/exported
-          const targetSourceFile = decl.getSourceFile();
+        if (stack.has(fileName)) return;
 
-          if (
-            targetSourceFile &&
-            !targetSourceFile.isDeclarationFile &&
-            !targetSourceFile.fileName.includes("node_modules")
-          ) {
-            const fileName = targetSourceFile.fileName;
-
-            // Cyclic dependency check:
-            // If we are already processing this file in the current chain, stop.
-            if (stack.has(fileName)) return;
-
-            // Recursively visit that file with the combined path
-            // Combine: /api + /users -> /api/users (cleaning up slashes)
-            const newBasePath = path
-              .join(basePath, usePath)
-              .replace(/\\/g, "/");
-
-            // Create a new stack branch for this recursion
-            const nextStack = new Set(stack).add(fileName);
-            this.visitNode(targetSourceFile, newBasePath, nextStack);
-          }
-        }
+        const newBasePath = path.join(basePath, usePath).replace(/\\/g, "/");
+        const nextStack = new Set(stack).add(fileName);
+        this.visitNode(targetSourceFile, newBasePath, nextStack);
       }
       return;
     }
@@ -483,51 +451,27 @@ class RouteAnalyzer {
 
     if (!validMethods.includes(methodName)) return;
 
-    if (args.length === 0) return;
-
     // Extract Path
     const pathArg = args[0];
     if (!pathArg) return;
-    let routePath = "/";
 
-    if (ts.isStringLiteral(pathArg)) {
-      routePath = pathArg.text;
-    } else if (ts.isNoSubstitutionTemplateLiteral(pathArg)) {
-      routePath = pathArg.text;
-    } else {
-      routePath = "/unknown-dynamic-path";
-    }
+    // Resolve path, even if it is a variable/constant
+    const routePath = this.resolvePathValue(pathArg);
+    if (!routePath) return; // Could not resolve path
 
-    // Prepend the base path passed down from router.use()
     let fullPath = path.join(basePath, routePath).replace(/\\/g, "/");
-    // Ensure one slash at start
     if (!fullPath.startsWith("/")) fullPath = "/" + fullPath;
 
     // Replace :param with {param}
     const openApiPath = fullPath.replace(/:([a-zA-Z0-9_]+)/g, "{$1}");
 
     // Extract Handler
-    // We grab the last argument as the handler
+    // We grab the last argument that looks like a function or identifier
     const handlerArg = args[args.length - 1];
-
     if (!handlerArg) return;
 
-    let handlerNode: ts.Node | undefined = handlerArg;
-
-    // If it's an Identifier (e.g. `shareDocument`), find the declaration
-    if (ts.isIdentifier(handlerArg)) {
-      const symbol = this.checker.getSymbolAtLocation(handlerArg);
-      if (symbol) {
-        // Find the actual declaration (FunctionDeclaration, VariableDeclaration, etc)
-        // We use valueDeclaration or the first declaration
-        const decl =
-          symbol.valueDeclaration ||
-          (symbol.declarations && symbol.declarations[0]);
-        if (decl) {
-          handlerNode = decl;
-        }
-      }
-    }
+    // Resolve the actual handler definition (following imports)
+    const handlerNode = this.resolveHandlerNode(handlerArg);
 
     if (handlerNode) {
       if (
@@ -538,6 +482,96 @@ class RouteAnalyzer {
         this.addOperation(openApiPath, methodName, handlerNode, node);
       }
     }
+  }
+
+  private resolvePathValue(node: ts.Node): string | undefined {
+    // 1. Literal string
+    if (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node)) {
+      return node.text;
+    }
+
+    // 2. Variable / Constant
+    if (ts.isIdentifier(node)) {
+      const type = this.checker.getTypeAtLocation(node);
+      if (type.isStringLiteral()) {
+        return type.value;
+      }
+    }
+
+    return undefined;
+  }
+
+  /**
+   * Given a node (identifier or expression), follows imports/aliases to find
+   * the original SourceFile where it is defined.
+   */
+  private resolveHandlerSourceFile(node: ts.Node): ts.SourceFile | undefined {
+    let symbol = this.checker.getSymbolAtLocation(node);
+    if (!symbol) return undefined;
+
+    if (symbol.flags & ts.SymbolFlags.Alias) {
+      symbol = this.checker.getAliasedSymbol(symbol);
+    }
+
+    const decl = symbol.declarations?.[0];
+    if (!decl) return undefined;
+
+    const sourceFile = decl.getSourceFile();
+    if (
+      sourceFile.isDeclarationFile ||
+      sourceFile.fileName.includes("node_modules")
+    ) {
+      return undefined;
+    }
+
+    return sourceFile;
+  }
+
+  /**
+   * Follows imports to find the actual Function/ArrowFunction declaration.
+   */
+  private resolveHandlerNode(
+    node: ts.Node,
+  ):
+    | ts.FunctionDeclaration
+    | ts.FunctionExpression
+    | ts.ArrowFunction
+    | undefined {
+    if (ts.isFunctionExpression(node) || ts.isArrowFunction(node)) {
+      return node;
+    }
+
+    if (ts.isIdentifier(node)) {
+      let symbol = this.checker.getSymbolAtLocation(node);
+      if (symbol) {
+        if (symbol.flags & ts.SymbolFlags.Alias) {
+          symbol = this.checker.getAliasedSymbol(symbol);
+        }
+        const decl =
+          symbol.valueDeclaration ||
+          (symbol.declarations && symbol.declarations[0]);
+
+        if (decl) {
+          if (
+            ts.isFunctionDeclaration(decl) ||
+            ts.isFunctionExpression(decl) ||
+            ts.isArrowFunction(decl)
+          ) {
+            return decl;
+          }
+          // Handle: const handler = (req, res) => ...
+          if (ts.isVariableDeclaration(decl) && decl.initializer) {
+            if (
+              ts.isArrowFunction(decl.initializer) ||
+              ts.isFunctionExpression(decl.initializer)
+            ) {
+              return decl.initializer;
+            }
+          }
+        }
+      }
+    }
+    return undefined;
   }
 
   private addOperation(
@@ -560,7 +594,7 @@ class RouteAnalyzer {
     const callJSDoc = this.extractJSDoc(callNode);
     this.mergeMetadata(operation, callJSDoc);
 
-    // 2. Extract JSDoc from the handler function definition
+    // 2. Extract JSDoc from the handler function definition (follow imports)
     const handlerJSDoc = this.extractJSDoc(handler);
     this.mergeMetadata(operation, handlerJSDoc);
 
@@ -601,16 +635,7 @@ class RouteAnalyzer {
         // Index 2: Request Body
         if (typeArgs[2]) {
           const bodySchema = this.schemaBuilder.generateSchema(typeArgs[2]);
-          if (
-            (Object.keys(bodySchema).length > 0 &&
-              bodySchema.type !== "object" &&
-              Object.keys(bodySchema).length > 1) ||
-            Object.keys(bodySchema.properties || {}).length > 0 ||
-            bodySchema.$ref ||
-            bodySchema.allOf ||
-            bodySchema.anyOf ||
-            bodySchema.oneOf
-          ) {
+          if (this.isValidSchema(bodySchema)) {
             operation.requestBody = {
               content: {
                 "application/json": { schema: bodySchema },
@@ -632,7 +657,7 @@ class RouteAnalyzer {
               operation.parameters!.push({
                 name: propName,
                 in: "query",
-                schema: { type: "string" },
+                schema: { type: "string" }, // Defaults to string, refinement hard without deep analysis
               });
             }
           });
@@ -653,6 +678,19 @@ class RouteAnalyzer {
     this.paths[routePath][method] = operation;
   }
 
+  private isValidSchema(schema: SchemaObject): boolean {
+    return (
+      (Object.keys(schema).length > 0 &&
+        schema.type !== "object" &&
+        Object.keys(schema).length > 1) ||
+      Object.keys(schema.properties || {}).length > 0 ||
+      !!schema.$ref ||
+      !!schema.allOf ||
+      !!schema.anyOf ||
+      !!schema.oneOf
+    );
+  }
+
   private scanBodyUsage(
     node: ts.Node,
     operation: OperationObject,
@@ -664,72 +702,121 @@ class RouteAnalyzer {
     visited.add(node);
 
     const visit = (n: ts.Node) => {
-      // Detect Response Status: res.status(404) or res.sendStatus(500)
+      // 1. Detect Response Status: res.status(404) or res.sendStatus(500)
       if (resName && ts.isCallExpression(n)) {
         const propAccess = n.expression;
-        if (
-          ts.isPropertyAccessExpression(propAccess) &&
-          propAccess.expression.getText() === resName &&
-          (propAccess.name.text === "status" ||
-            propAccess.name.text === "sendStatus")
-        ) {
-          const arg = n.arguments[0];
-          if (arg && ts.isNumericLiteral(arg)) {
-            const code = arg.text;
-            if (!operation.responses[code]) {
-              const descriptions: Record<string, string> = {
-                "200": "OK",
-                "201": "Created",
-                "204": "No Content",
-                "400": "Bad Request",
-                "401": "Unauthorized",
-                "403": "Forbidden",
-                "404": "Not Found",
-                "500": "Internal Server Error",
-              };
-              operation.responses[code] = {
-                description: descriptions[code] || "Status " + code,
-              };
+        if (ts.isPropertyAccessExpression(propAccess)) {
+          const expressionText = propAccess.expression.getText();
+          const methodText = propAccess.name.text;
+
+          // Check simple: res.sendStatus(code)
+          if (expressionText === resName && methodText === "sendStatus") {
+            const arg = n.arguments[0];
+            if (arg && ts.isNumericLiteral(arg)) {
+              this.addResponse(operation, arg.text);
+            }
+          }
+
+          // Check chain: res.status(code)
+          if (expressionText === resName && methodText === "status") {
+            const arg = n.arguments[0];
+            if (arg && ts.isNumericLiteral(arg)) {
+              this.addResponse(operation, arg.text);
+            }
+          }
+
+          // Check response body: res.json(data) or res.send(data)
+          if (
+            (methodText === "json" || methodText === "send") &&
+            n.arguments.length > 0
+          ) {
+            const arg = n.arguments[0];
+            if (arg) {
+              const responseType = this.checker.getTypeAtLocation(arg);
+              const schema = this.schemaBuilder.generateSchema(responseType);
+
+              if (!operation.responses["200"]) {
+                operation.responses["200"] = { description: "OK" };
+              }
+
+              if (!operation.responses["200"].content) {
+                operation.responses["200"].content = {
+                  "application/json": { schema },
+                };
+              }
             }
           }
         }
       }
 
-      // Handle Casts: const body = req.body as Type;
+      // 2. Handle Casts: const body = req.body as Type;
       if (ts.isAsExpression(n) || ts.isTypeAssertionExpression(n)) {
         if (ts.isPropertyAccessExpression(n.expression)) {
+          // req.body as Type
           if (
             reqName &&
             n.expression.expression.getText() === reqName &&
             n.expression.name.text === "body"
           ) {
             const schema = this.schemaBuilder.generateSchema(n.type);
-
-            // Check if valid schema was generated
-            if (Object.keys(schema).length > 0) {
+            if (this.isValidSchema(schema)) {
               operation.requestBody = {
                 content: { "application/json": { schema: schema } },
               };
             }
           }
-        }
-      }
 
-      // Simple usage detection fallback
-      if (ts.isPropertyAccessExpression(n)) {
-        if (n.expression.getText() === reqName && n.name.text === "body") {
-          if (!operation.requestBody) {
-            operation.requestBody = {
-              content: {
-                "application/json": { schema: { type: "object", example: {} } },
-              },
-            };
+          // req.query as Type
+          if (
+            reqName &&
+            n.expression.expression.getText() === reqName &&
+            n.expression.name.text === "query"
+          ) {
+            const queryType = this.checker.getTypeAtLocation(n.type);
+            const props = queryType.getProperties();
+            props.forEach((prop) => {
+              const propName = prop.getName();
+              if (
+                !operation.parameters!.some(
+                  (p) => p.name === propName && p.in === "query",
+                )
+              ) {
+                operation.parameters!.push({
+                  name: propName,
+                  in: "query",
+                  schema: { type: "string" },
+                  required: !(
+                    (prop.getFlags() & ts.SymbolFlags.Optional) !==
+                    0
+                  ),
+                });
+              }
+            });
           }
         }
       }
+
       ts.forEachChild(n, visit);
     };
     visit(node);
+  }
+
+  private addResponse(operation: OperationObject, code: string) {
+    if (!operation.responses[code]) {
+      const descriptions: Record<string, string> = {
+        "200": "OK",
+        "201": "Created",
+        "204": "No Content",
+        "400": "Bad Request",
+        "401": "Unauthorized",
+        "403": "Forbidden",
+        "404": "Not Found",
+        "500": "Internal Server Error",
+      };
+      operation.responses[code] = {
+        description: descriptions[code] || "Status " + code,
+      };
+    }
   }
 
   private scanSwaggerComments(body: ts.Block, operation: OperationObject) {
@@ -799,13 +886,19 @@ class RouteAnalyzer {
   private extractJSDoc(node: ts.Node) {
     let tags = ts.getJSDocTags(node);
 
-    // If no tags on the node, check the parent (ExpressionStatement)
-    if (
-      tags.length === 0 &&
-      node.parent &&
-      ts.isExpressionStatement(node.parent)
-    ) {
-      tags = ts.getJSDocTags(node.parent);
+    // If no tags on the node, check the parent (ExpressionStatement or VariableDeclaration)
+    if (tags.length === 0) {
+      if (node.parent && ts.isExpressionStatement(node.parent)) {
+        tags = ts.getJSDocTags(node.parent);
+      } else if (node.parent && ts.isVariableDeclaration(node.parent)) {
+        // Handle const handler = () => {}
+        if (
+          node.parent.parent &&
+          ts.isVariableDeclarationList(node.parent.parent)
+        ) {
+          tags = ts.getJSDocTags(node.parent.parent.parent);
+        }
+      }
     }
 
     const result: any = { tags: [] };
@@ -841,7 +934,6 @@ export function generateOpenApi(options: GeneratorOptions) {
   console.log("🔍 Analyzing AST...");
 
   const analyzer = new RouteAnalyzer(options);
-  // Pass the entryFile explicitly to start the crawl
   const { paths, schemas } = analyzer.analyze(options.entryFile);
 
   const doc: OpenApiDocument = {

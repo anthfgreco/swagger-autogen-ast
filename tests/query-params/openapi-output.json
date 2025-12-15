@@ -10,7 +10,18 @@
       "get": {
         "responses": {
           "200": {
-            "description": "OK"
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "format": "nullable"
+                  }
+                }
+              }
+            }
           }
         },
         "parameters": [

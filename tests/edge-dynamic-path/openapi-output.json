@@ -6,14 +6,30 @@
   },
   "servers": [],
   "paths": {
-    "/unknown-dynamic-path": {
+    "/{id}": {
       "get": {
         "responses": {
           "200": {
-            "description": "OK"
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
           }
         },
-        "parameters": [],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
         "tags": []
       }
     }

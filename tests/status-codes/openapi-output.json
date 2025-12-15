@@ -10,7 +10,14 @@
       "get": {
         "responses": {
           "200": {
-            "description": "OK"
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
           },
           "400": {
             "description": "Bad Request"
@@ -28,6 +35,18 @@
     }
   },
   "components": {
-    "schemas": {}
+    "schemas": {
+      "__object": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "status"
+        ]
+      }
+    }
   }
 }

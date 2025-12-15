@@ -51,7 +51,14 @@
       "post": {
         "responses": {
           "200": {
-            "description": "OK"
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/__object"
+                }
+              }
+            }
           },
           "204": {
             "description": "No Content"
@@ -90,6 +97,18 @@
     }
   },
   "components": {
-    "schemas": {}
+    "schemas": {
+      "__object": {
+        "type": "object",
+        "properties": {
+          "error": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "error"
+        ]
+      }
+    }
   }
 }

@@ -10,9 +10,10 @@ const ENTRY_FILE = path.join(__dirname, "index.ts");
 const OUTPUT_FILE = path.join(__dirname, "openapi-output.json");
 
 describe("edge-dynamic-path", () => {
-  test("non-literal path becomes /unknown-dynamic-path", () => {
+  test("edge dynamic path is handled correctly", () => {
     const spec = generateSpec(ENTRY_FILE, OUTPUT_FILE);
 
-    expect(spec.paths["/unknown-dynamic-path"]).toBeDefined();
+    // expect(spec.paths["/unknown-dynamic-path"]).toBeDefined();
+    expect(spec.paths["/{id}"]).toBeDefined();
   });
 });
