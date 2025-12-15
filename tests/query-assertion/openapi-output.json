@@ -1,0 +1,60 @@
+{
+  "openapi": "3.0.0",
+  "info": {
+    "title": "Test API",
+    "version": "1.0.0"
+  },
+  "servers": [],
+  "paths": {
+    "/search": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SearchQuery"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "tags": []
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "SearchQuery": {
+        "type": "object",
+        "properties": {
+          "q": {
+            "type": "string"
+          },
+          "page": {
+            "type": "number"
+          }
+        }
+      }
+    }
+  }
+}

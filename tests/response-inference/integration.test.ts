@@ -9,7 +9,7 @@ const __dirname = path.dirname(__filename);
 const ENTRY_FILE = path.join(__dirname, "index.ts");
 const OUTPUT_FILE = path.join(__dirname, "openapi-output.json");
 
-describe("edge-response-inference", () => {
+describe("response-inference", () => {
   test("res.json(res) creates a 200 response and (ideally) response schema", () => {
     const spec = generateSpec(ENTRY_FILE, OUTPUT_FILE);
 

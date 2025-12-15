@@ -812,7 +812,10 @@ class RouteAnalyzer {
                     name: propName,
                     in: "query",
                     schema: { type: "string" },
-                    required: !((prop.getFlags() & ts.SymbolFlags.Optional) !== 0),
+                    required: !(
+                      (prop.getFlags() & ts.SymbolFlags.Optional) !==
+                      0
+                    ),
                   });
                 }
               });
