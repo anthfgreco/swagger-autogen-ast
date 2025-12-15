@@ -39,6 +39,9 @@ describe("js-test integration", () => {
     expect(spec.paths["/a/b/a/hello-from-a"]).toBeUndefined();
 
     // Index extension (no path prefix)
-    expect(spec.paths["/indexExtension"]).toBeDefined();
+    const routeIndexExtension = spec.paths["/indexExtension"];
+    expect(routeIndexExtension).toBeDefined();
+    expect(routeIndexExtension.get.responses["200"]).toBeDefined();
+    expect(routeIndexExtension.get.responses["500"]).toBeDefined();
   });
 });

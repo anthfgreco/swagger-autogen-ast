@@ -556,6 +556,7 @@ class RouteAnalyzer {
         handler.body,
         operation,
         handler.parameters[0]?.name?.getText(),
+        handler.parameters[1]?.name?.getText(),
       );
     }
 
@@ -566,16 +567,49 @@ class RouteAnalyzer {
     node: ts.Node,
     operation: OperationObject,
     reqName: string | undefined,
+    resName: string | undefined,
     visited = new Set<ts.Node>(),
   ) {
-    if (!reqName || visited.has(node)) return;
+    if ((!reqName && !resName) || visited.has(node)) return;
     visited.add(node);
 
     const visit = (n: ts.Node) => {
-      // 1. Handle Casts: const body = req.body as Type;
+      // Detect Response Status: res.status(404) or res.sendStatus(500)
+      if (resName && ts.isCallExpression(n)) {
+        const propAccess = n.expression;
+        if (
+          ts.isPropertyAccessExpression(propAccess) &&
+          propAccess.expression.getText() === resName &&
+          (propAccess.name.text === "status" ||
+            propAccess.name.text === "sendStatus")
+        ) {
+          const arg = n.arguments[0];
+          if (arg && ts.isNumericLiteral(arg)) {
+            const code = arg.text;
+            if (!operation.responses[code]) {
+              const descriptions: Record<string, string> = {
+                "200": "OK",
+                "201": "Created",
+                "204": "No Content",
+                "400": "Bad Request",
+                "401": "Unauthorized",
+                "403": "Forbidden",
+                "404": "Not Found",
+                "500": "Internal Server Error",
+              };
+              operation.responses[code] = {
+                description: descriptions[code] || "Status " + code,
+              };
+            }
+          }
+        }
+      }
+
+      // Handle Casts: const body = req.body as Type;
       if (ts.isAsExpression(n) || ts.isTypeAssertionExpression(n)) {
         if (ts.isPropertyAccessExpression(n.expression)) {
           if (
+            reqName &&
             n.expression.expression.getText() === reqName &&
             n.expression.name.text === "body"
           ) {
