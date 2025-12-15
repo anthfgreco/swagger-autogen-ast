@@ -33,7 +33,25 @@ npm install swagger-autogen-ast --save-dev
 
 ## Usage
 
-Create a generator script (e.g., `generate-swagger.ts`) in your project root:
+There are two ways to use this generator:
+
+### 1. Via Command Line (Recommended)
+
+The easiest way is to run the tool directly against your project. The generator will automatically find your `tsconfig.json`.
+
+```bash
+npx swagger-autogen-ast <entryFile> <outputFile>
+```
+
+**Example:**
+
+```bash
+npx swagger-autogen-ast ./src/index.ts ./swagger.json
+```
+
+### 2. Via Programmatic Script
+
+For more control over the configuration, such as defining API info and servers, you can create a generator script (e.g., `generate-swagger.ts`):
 
 ```typescript
 import { generateOpenApi } from "swagger-autogen-ast";
@@ -60,7 +78,7 @@ const options = {
 generateOpenApi(options);
 ```
 
-Run the script:
+Then run the script:
 
 ```bash
 npx tsx generate-swagger.ts
