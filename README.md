@@ -13,13 +13,14 @@ Unlike other tools that require extensive JSDoc decorators, this library uses th
 
 ## Features
 
-- **AST-Powered Crawling:** Recursively follows imports in `router.use()` to detect nested routes and circular dependencies automatically.
-- **Deep Schema Inference:** Converts TypeScript Interfaces, Enums, Unions (`|`), and Intersections (`&`) into OpenAPI Schemas.
-- **Request Body Detection:**
-  - Infers schema from `req.body as MyType` assertions.
+- **AST-Powered Crawling:** Recursively follows imports in `router.use()` and controller functions to analyze code across files.
+- **Deep Schema Inference:** Converts TypeScript Interfaces, Enums, Unions, Intersections, and `Date` objects into OpenAPI Schemas.
+- **Request Body & Query Detection:**
+  - Infers schema from `req.body` and `req.query` type assertions (`as MyType`).
   - Infers schema from Express Generics: `Request<{}, {}, MyBodyType>`.
-- **Automatic Status Codes:** Scans controller logic for `res.status(404)` or `res.sendStatus(201)` to automatically register response codes.
-- **Zero-Config Path Params:** Automatically converts Express style paths (`/user/:id`) to OpenAPI format (`/user/{id}`).
+- **Response Body Inference:** automatically generates schemas from `res.json(data)` and `res.send(data)` calls.
+- **Smart Path Resolution:** Resolves paths from string literals (`"/users"`) as well as constants and variables (`USER_ROUTE`).
+- **Automatic Status Codes:** Scans controller logic to automatically register response codes.
 - **Comment Overrides:** Supports JSDoc and `#swagger` inline comments for when you need manual control.
 
 ## Installation
@@ -36,7 +37,6 @@ Create a generator script (e.g., `generate-swagger.ts`) in your project root:
 
 ```typescript
 import { generateOpenApi } from "swagger-autogen-ast";
-import path from "path";
 
 const options = {
   // Point to your main application entry file (e.g., app.ts or index.ts)
@@ -97,22 +97,25 @@ router.post(
 );
 ```
 
-### 2. Request Body via Type Assertion
+### 2. Request & Query via Type Assertion
 
-If you don't use generics, the generator detects type assertions (`as Type`) on `req.body` within the function body.
+If you don't use generics, the generator detects type assertions (`as Type`) on `req.body` and `req.query` within the function body.
 
 ```typescript
 router.put("/users/:id", (req, res) => {
-  // The generator sees this cast and applies 'UpdateUser' as the request body schema
+  // Infers request body schema
   const payload = req.body as UpdateUser;
+
+  // Infers query parameters
+  const { filter } = req.query as UserSearchQuery;
 
   res.send("Updated");
 });
 ```
 
-### 3. Response Status Codes
+### 3. Response Bodies & Status Codes
 
-The analyzer scans the function body for response methods. It matches standard Express patterns to generate the `responses` object in the spec.
+The analyzer scans the function body for response methods. It matches standard Express patterns to generate the `responses` object, **including the schema of the data sent back**.
 
 ```typescript
 router.get("/admin", (req, res) => {
@@ -121,10 +124,11 @@ router.get("/admin", (req, res) => {
   }
 
   try {
-    // ... logic
-    return res.status(200).json(data); // Adds '200: OK' to spec
+    const user: UserProfile = await getUser();
+    // Adds '200: OK' with schema generated from 'UserProfile'
+    return res.status(200).json(user);
   } catch (e) {
-    return res.sendStatus(500); // Adds '500: Internal Server Error' to spec
+    return res.sendStatus(500); // Adds '500: Internal Server Error'
   }
 });
 ```
@@ -138,13 +142,12 @@ You can control specific endpoint details using JSDoc (above the route) or inlin
 This is useful for adding tags or descriptions directly inside the handler logic, keeping related code together.
 
 ```typescript
+// Works with imported handlers too!
 router.post("/upload", (req, res) => {
   // #swagger.tags = ["File Operations"]
   // #swagger.summary = "Upload a file"
   // #swagger.description = "Accepts multipart/form-data."
   // #swagger.deprecated = true
-
-  // You can even override the operationId
   // #swagger.operationId = "uploadFileHandler"
 
   res.status(200).send();
@@ -167,16 +170,17 @@ router.get("/user/:id", handler);
 ## How It Works
 
 1.  **Entry Point:** The generator starts at your `entryFile`.
-2.  **Recursive Crawl:** It looks for `router.use()` calls. If a router is imported from another file, the analyzer jumps to that file, appending the path prefix (e.g., `app.use('/api', apiRouter)`).
-3.  **Circular Safety:** It maintains a stack of visited files to handle circular dependencies gracefully (e.g., `a.js` imports `b.js` imports `a.js`).
-4.  **AST Analysis:** inside every route handler:
+2.  **Recursive Crawl:** It looks for `router.use()` calls. If a router is imported from another file, the analyzer jumps to that file, appending the path prefix.
+3.  **Controller Navigation:** If a route handler is defined in a separate file (e.g., `import { handler } from './controllers'`), the analyzer jumps to that file to scan for logic and types.
+4.  **Circular Safety:** It maintains a stack of visited files to handle circular dependencies gracefully.
+5.  **AST Analysis:** inside every route handler:
     - It extracts JSDoc comments.
     - It scans the function body for `#swagger` comments.
-    - It scans for `res.status` calls.
+    - It scans for `res.status`, `res.json`, and `res.send` calls to infer responses.
     - It analyzes `req` usage for type assertions.
-5.  **Schema Generation:** When a TypeScript type is encountered (like an Interface used in a request body), `SchemaBuilder` recursively generates a JSON schema, handling:
-    - Primitive types
-    - Arrays & Tuples
+6.  **Schema Generation:** When a TypeScript type is encountered, `SchemaBuilder` recursively generates a JSON schema, handling:
+    - Primitive types & Dates
+    - Arrays, Tuples, & Enums
     - Nested Objects
     - Union Types (`string | number` becomes `oneOf` / `enum`)
     - Intersection Types (`TypeA & TypeB` becomes `allOf`)
