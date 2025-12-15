@@ -6,31 +6,6 @@
   },
   "servers": [],
   "paths": {
-    "/hello-from-b": {
-      "get": {
-        "responses": {
-          "200": {
-            "description": "OK"
-          }
-        },
-        "parameters": [],
-        "tags": []
-      }
-    },
-    "/hello-from-a": {
-      "get": {
-        "responses": {
-          "200": {
-            "description": "OK"
-          }
-        },
-        "parameters": [],
-        "tags": [
-          "A Handler Endpoint"
-        ],
-        "description": "A File Description"
-      }
-    },
     "/share-document": {
       "post": {
         "responses": {
