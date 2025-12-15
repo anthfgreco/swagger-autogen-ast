@@ -268,9 +268,6 @@ class RouteAnalyzer {
   private schemaBuilder: SchemaBuilder;
   private paths: Record<string, Record<string, OperationObject>> = {};
 
-  // Track visited files to prevent infinite recursion (circular imports)
-  private visitedFiles = new Set<string>();
-
   constructor(options: GeneratorOptions) {
     const compilerOptions: ts.CompilerOptions = options.tsconfigPath
       ? this.loadTsConfig(options.tsconfigPath)
@@ -311,8 +308,8 @@ class RouteAnalyzer {
       throw new Error("Entry file not found in program.");
     }
 
-    // Start recursion with empty base path
-    this.visitNode(entrySourceFile, "");
+    // Start stack with entry file to prevent immediate self-recursion
+    this.visitNode(entrySourceFile, "", new Set([entrySourceFile.fileName]));
 
     return {
       paths: this.paths,
@@ -320,21 +317,19 @@ class RouteAnalyzer {
     };
   }
 
-  private visitNode(node: ts.Node, basePath: string) {
-    if (ts.isSourceFile(node)) {
-      const fileName = node.fileName;
-      if (this.visitedFiles.has(fileName)) return;
-      this.visitedFiles.add(fileName);
-    }
-
+  private visitNode(node: ts.Node, basePath: string, stack: Set<string>) {
     if (ts.isCallExpression(node)) {
-      this.handleCallExpression(node, basePath);
+      this.handleCallExpression(node, basePath, stack);
     }
 
-    ts.forEachChild(node, (n) => this.visitNode(n, basePath));
+    ts.forEachChild(node, (n) => this.visitNode(n, basePath, stack));
   }
 
-  private handleCallExpression(node: ts.CallExpression, basePath: string) {
+  private handleCallExpression(
+    node: ts.CallExpression,
+    basePath: string,
+    stack: Set<string>,
+  ) {
     const propAccess = node.expression;
     if (!ts.isPropertyAccessExpression(propAccess)) return;
 
@@ -374,13 +369,21 @@ class RouteAnalyzer {
             !targetSourceFile.isDeclarationFile &&
             !targetSourceFile.fileName.includes("node_modules")
           ) {
+            const fileName = targetSourceFile.fileName;
+
+            // Cyclic dependency check:
+            // If we are already processing this file in the current chain, stop.
+            if (stack.has(fileName)) return;
+
             // Recursively visit that file with the combined path
             // Combine: /api + /users -> /api/users (cleaning up slashes)
             const newBasePath = path
               .join(basePath, usePath)
               .replace(/\\/g, "/");
 
-            this.visitNode(targetSourceFile, newBasePath);
+            // Create a new stack branch for this recursion
+            const nextStack = new Set(stack).add(fileName);
+            this.visitNode(targetSourceFile, newBasePath, nextStack);
           }
         }
       }
