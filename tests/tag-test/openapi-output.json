@@ -46,6 +46,47 @@
           }
         }
       }
+    },
+    "/inline-share-document": {
+      "post": {
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "204": {
+            "description": "No Content"
+          },
+          "400": {
+            "description": "Bad Request"
+          }
+        },
+        "parameters": [],
+        "tags": [
+          "Inline Tag Handler Endpoint"
+        ],
+        "description": "Inline endpoint to share a document.",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "documentId": {
+                    "type": "string"
+                  },
+                  "userId": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "documentId",
+                  "userId"
+                ]
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {

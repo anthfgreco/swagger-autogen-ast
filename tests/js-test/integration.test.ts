@@ -1,7 +1,7 @@
 import path from "path";
 import { fileURLToPath } from "url";
 import { describe, expect, test } from "vitest";
-import { generateSpec } from "./utils";
+import { generateSpec } from "../utils";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);

@@ -1,5 +1,5 @@
 import fs from "fs";
-import { generateOpenApi } from "../../src/index";
+import { generateOpenApi } from "../src/index";
 
 export function generateSpec(entryFile: string, outputFile: string) {
   generateOpenApi({
