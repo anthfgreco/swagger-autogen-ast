@@ -1,4 +1,4 @@
-import { Router, Request, Response } from "express";
+import { Request, Response, Router } from "express";
 
 const router = Router();
 
@@ -14,8 +14,11 @@ router.post("/union", (req: Request<{}, {}, StringOrNumber>, res: Response) => {
   res.send();
 });
 
-router.post("/object-union", (req: Request<{}, {}, ObjectUnion>, res: Response) => {
-  res.send();
-});
+router.post(
+  "/object-union",
+  (req: Request<{}, {}, ObjectUnion>, res: Response) => {
+    res.send();
+  },
+);
 
 export default router;

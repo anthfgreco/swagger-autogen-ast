@@ -16,19 +16,25 @@ describe("primitive-types", () => {
     const route = spec.paths["/primitives"].post;
     let schema = route.requestBody.content["application/json"].schema;
     if (schema.$ref) {
-        schema = spec.components.schemas[schema.$ref.split("/").pop()];
+      schema = spec.components.schemas[schema.$ref.split("/").pop()];
     }
 
     // void -> {}
     expect(schema.properties.nothing).toEqual({});
-    
+
     // any -> {}
     expect(schema.properties.unknown).toEqual({});
 
     // undefined -> { type: "string", format: "nullable" }
-    expect(schema.properties.missing).toEqual({ type: "string", format: "nullable" });
+    expect(schema.properties.missing).toEqual({
+      type: "string",
+      format: "nullable",
+    });
 
     // null -> { type: "string", format: "nullable" }
-    expect(schema.properties.empty).toEqual({ type: "string", format: "nullable" });
+    expect(schema.properties.empty).toEqual({
+      type: "string",
+      format: "nullable",
+    });
   });
 });

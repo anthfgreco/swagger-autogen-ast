@@ -1,4 +1,4 @@
-import { Router, Request, Response } from "express";
+import { Request, Response, Router } from "express";
 
 const router = Router();
 
@@ -9,8 +9,11 @@ interface Primitives {
   empty: null;
 }
 
-router.post("/primitives", (req: Request<{}, {}, Primitives>, res: Response) => {
-  res.send();
-});
+router.post(
+  "/primitives",
+  (req: Request<{}, {}, Primitives>, res: Response) => {
+    res.send();
+  },
+);
 
 export default router;

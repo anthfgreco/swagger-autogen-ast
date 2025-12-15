@@ -16,7 +16,7 @@ describe("tuple-types", () => {
     const route = spec.paths["/tuple"].post;
     let schema = route.requestBody.content["application/json"].schema;
     if (schema.$ref) {
-        schema = spec.components.schemas[schema.$ref.split("/").pop()];
+      schema = spec.components.schemas[schema.$ref.split("/").pop()];
     }
 
     // Tuples are usually converted to Arrays in basic OpenAPI 3.0 (3.1 supports prefixItems)
@@ -24,7 +24,7 @@ describe("tuple-types", () => {
     // It likely treats them as generic arrays or arrays of the first type if not handled specifically.
     // Let's see what the implementation does:
     // if (this.typeChecker.isTupleType(type)) return true; -> returns { type: 'array', items: ... }
-    
+
     expect(schema.properties.point.type).toBe("array");
     // It might just pick the first type or union of types for items
     // Implementation: const elementType = typeArgs && typeArgs.length > 0 ? typeArgs[0] : null;

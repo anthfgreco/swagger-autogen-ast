@@ -17,9 +17,9 @@ describe("union-types", () => {
     const unionRoute = spec.paths["/union"].post;
     let unionSchema = unionRoute.requestBody.content["application/json"].schema;
     if (unionSchema.$ref) {
-        unionSchema = spec.components.schemas[unionSchema.$ref.split("/").pop()];
+      unionSchema = spec.components.schemas[unionSchema.$ref.split("/").pop()];
     }
-    
+
     const valueProp = unionSchema.properties.value;
     expect(valueProp.anyOf).toBeDefined();
     expect(valueProp.anyOf).toHaveLength(2);
@@ -32,7 +32,7 @@ describe("union-types", () => {
     const objRoute = spec.paths["/object-union"].post;
     let objSchema = objRoute.requestBody.content["application/json"].schema;
     if (objSchema.$ref) {
-        objSchema = spec.components.schemas[objSchema.$ref.split("/").pop()];
+      objSchema = spec.components.schemas[objSchema.$ref.split("/").pop()];
     }
 
     const itemProp = objSchema.properties.item;

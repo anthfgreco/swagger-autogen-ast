@@ -14,20 +14,20 @@ import { fileURLToPath } from "url";
 interface GeneratorOptions {
   entryFile: string;
   outputFile: string;
-  tsconfigPath?: string;
-  info?: OpenApiInfo;
-  servers?: OpenApiServer[];
+  tsconfigPath?: string | undefined;
+  info?: OpenApiInfo | undefined;
+  servers?: OpenApiServer[] | undefined;
 }
 
 interface OpenApiInfo {
   title: string;
   version: string;
-  description?: string;
+  description?: string | undefined;
 }
 
 interface OpenApiServer {
   url: string;
-  description?: string;
+  description?: string | undefined;
 }
 
 interface OpenApiDocument {
@@ -37,57 +37,57 @@ interface OpenApiDocument {
   paths: Record<string, Record<string, OperationObject>>;
   components: {
     schemas: Record<string, SchemaObject>;
-    securitySchemes?: Record<string, any>;
+    securitySchemes?: Record<string, any> | undefined;
   };
 }
 
 interface OperationObject {
-  summary?: string;
-  description?: string;
-  operationId?: string;
-  tags?: string[];
-  parameters?: ParameterObject[];
-  requestBody?: RequestBodyObject;
+  summary?: string | undefined;
+  description?: string | undefined;
+  operationId?: string | undefined;
+  tags?: string[] | undefined;
+  parameters?: ParameterObject[] | undefined;
+  requestBody?: RequestBodyObject | undefined;
   responses: Record<string, ResponseObject>;
-  deprecated?: boolean;
+  deprecated?: boolean | undefined;
 }
 
 interface ParameterObject {
   name: string;
   in: "query" | "header" | "path" | "cookie";
-  description?: string;
-  required?: boolean;
-  schema?: SchemaObject;
+  description?: string | undefined;
+  required?: boolean | undefined;
+  schema?: SchemaObject | undefined;
 }
 
 interface RequestBodyObject {
-  description?: string;
+  description?: string | undefined;
   content: Record<string, MediaTypeObject>;
-  required?: boolean;
+  required?: boolean | undefined;
 }
 
 interface ResponseObject {
   description: string;
-  content?: Record<string, MediaTypeObject>;
+  content?: Record<string, MediaTypeObject> | undefined;
 }
 
 interface MediaTypeObject {
-  schema?: SchemaObject;
+  schema?: SchemaObject | undefined;
 }
 
 interface SchemaObject {
-  type?: string;
-  format?: string;
-  properties?: Record<string, SchemaObject>;
-  items?: SchemaObject;
-  required?: string[];
-  enum?: any[];
-  $ref?: string;
-  oneOf?: SchemaObject[];
-  anyOf?: SchemaObject[];
-  allOf?: SchemaObject[];
-  description?: string;
-  example?: any;
+  type?: string | undefined;
+  format?: string | undefined;
+  properties?: Record<string, SchemaObject> | undefined;
+  items?: SchemaObject | undefined;
+  required?: string[] | undefined;
+  enum?: any[] | undefined;
+  $ref?: string | undefined;
+  oneOf?: SchemaObject[] | undefined;
+  anyOf?: SchemaObject[] | undefined;
+  allOf?: SchemaObject[] | undefined;
+  description?: string | undefined;
+  example?: any | undefined;
 }
 
 /**
@@ -421,6 +421,8 @@ class RouteAnalyzer {
       const pathArg = args[0];
       const handlerArg = args[1]; // Expected to be the imported router
 
+      if (!pathArg || !handlerArg) return;
+
       // Extract the prefix path (e.g. "/tagsInFunction")
       let usePath = "/";
       if (
@@ -481,8 +483,11 @@ class RouteAnalyzer {
 
     if (!validMethods.includes(methodName)) return;
 
+    if (args.length === 0) return;
+
     // Extract Path
     const pathArg = args[0];
+    if (!pathArg) return;
     let routePath = "/";
 
     if (ts.isStringLiteral(pathArg)) {
@@ -504,6 +509,8 @@ class RouteAnalyzer {
     // Extract Handler
     // We grab the last argument as the handler
     const handlerArg = args[args.length - 1];
+
+    if (!handlerArg) return;
 
     let handlerNode: ts.Node | undefined = handlerArg;
 
@@ -585,6 +592,7 @@ class RouteAnalyzer {
     // 5. Types (Request<Params, Res, Body, Query>)
     if (handler.parameters.length >= 2) {
       const reqParam = handler.parameters[0];
+      if (!reqParam) return;
       const reqType = this.checker.getTypeAtLocation(reqParam);
 
       if ((reqType as any).typeArguments) {
@@ -752,6 +760,8 @@ class RouteAnalyzer {
       const keyPath = match[1];
       const valueStr = match[2];
 
+      if (!keyPath || !valueStr) return;
+
       try {
         const value = new Function(`return ${valueStr}`)();
         if (keyPath === "tags") operation.tags = value;
@@ -771,10 +781,11 @@ class RouteAnalyzer {
     let current = obj;
     for (let i = 0; i < parts.length - 1; i++) {
       const part = parts[i];
-      if (!current[part]) current[part] = {};
-      current = current[part];
+      if (part && !current[part]) current[part] = {};
+      if (part) current = current[part];
     }
-    current[parts[parts.length - 1]] = value;
+    const lastPart = parts[parts.length - 1];
+    if (lastPart) current[lastPart] = value;
   }
 
   private mergeMetadata(op: OperationObject, meta: any) {
@@ -891,8 +902,8 @@ if (isMain()) {
     process.exit(1);
   }
 
-  const entryFile = path.resolve(process.cwd(), args[0]);
-  const outputFile = path.resolve(process.cwd(), args[1]);
+  const entryFile = path.resolve(process.cwd(), args[0]!);
+  const outputFile = path.resolve(process.cwd(), args[1]!);
 
   // Auto-detect tsconfig if not provided
   let tsconfigPath = args[2] ? path.resolve(process.cwd(), args[2]) : undefined;

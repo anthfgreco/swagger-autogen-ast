@@ -16,12 +16,12 @@ describe("class-methods", () => {
     const route = spec.paths["/class"].post;
     let schema = route.requestBody.content["application/json"].schema;
     if (schema.$ref) {
-        schema = spec.components.schemas[schema.$ref.split("/").pop()];
+      schema = spec.components.schemas[schema.$ref.split("/").pop()];
     }
 
     expect(schema.properties).toHaveProperty("name");
     expect(schema.properties).toHaveProperty("age");
-    
+
     // Methods should be excluded
     expect(schema.properties).not.toHaveProperty("getFullName");
     expect(schema.properties).not.toHaveProperty("save");
