@@ -29,8 +29,11 @@ describe("tag-test integration", () => {
     const requestBody = tsRoute.post.requestBody;
     expect(requestBody).toBeDefined();
 
+    // Schema properties and types
     const schema = requestBody.content["application/json"].schema;
     expect(schema.properties).toHaveProperty("documentId");
     expect(schema.properties).toHaveProperty("userId");
+    expect(schema.properties.documentId.type).toBe("string");
+    expect(schema.properties.userId.type).toBe("string");
   });
 });

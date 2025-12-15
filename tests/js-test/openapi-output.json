@@ -66,6 +66,17 @@
         "parameters": [],
         "tags": []
       }
+    },
+    "/indexExtension": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "parameters": [],
+        "tags": []
+      }
     }
   },
   "components": {

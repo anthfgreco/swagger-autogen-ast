@@ -25,7 +25,7 @@ describe("js-test integration", () => {
     // b.js is visited here directly, even though it was also visited via a.js below.
     expect(spec.paths["/b/hello-from-b"]).toBeDefined();
 
-    // 2. Nested Mounts (index -> a -> b)
+    // Nested Mounts (index -> a -> b)
     expect(spec.paths["/a/b/hello-from-b"]).toBeDefined();
 
     // Circular Dependency Handling (index -> b -> a)
@@ -37,5 +37,8 @@ describe("js-test integration", () => {
     // The analyzer should stop when it sees 'a.js' a second time in the stack.
     // So index -> a -> b -> a should NOT generate routes.
     expect(spec.paths["/a/b/a/hello-from-a"]).toBeUndefined();
+
+    // Index extension (no path prefix)
+    expect(spec.paths["/indexExtension"]).toBeDefined();
   });
 });
