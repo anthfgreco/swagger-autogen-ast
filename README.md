@@ -21,9 +21,9 @@ Unlike other tools that require extensive JSDoc decorators, this library uses th
   - Infers schema from `req.body` and `req.query` type assertions (`as MyType`).
   - Infers schema from Express Generics: `Request<{}, {}, MyBodyType>`.
 - **Response Body Inference:** automatically generates schemas from `res.json(data)` and `res.send(data)` calls.
-- **Smart Path Resolution:** Resolves paths from string literals (`"/users"`) as well as constants and variables (`USER_ROUTE`).
 - **Automatic Status Codes:** Scans controller logic to automatically register response codes.
 - **Comment Overrides:** Supports JSDoc and `#swagger` inline comments for when you need manual control.
+- **Example-Driven Tests:** The entire feature set is covered by integration tests that also serve as usage examples. See the /tests directory for details.
 
 ## Installation
 
