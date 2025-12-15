@@ -1,0 +1,33 @@
+{
+  "openapi": "3.0.0",
+  "info": {
+    "title": "Test API",
+    "version": "1.0.0"
+  },
+  "servers": [],
+  "paths": {
+    "/upload": {
+      "post": {
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "201": {
+            "description": "File Created"
+          }
+        },
+        "parameters": [],
+        "tags": [
+          "File Operations"
+        ],
+        "summary": "Upload a file",
+        "description": "Accepts multipart/form-data.",
+        "deprecated": true,
+        "operationId": "uploadFileHandler"
+      }
+    }
+  },
+  "components": {
+    "schemas": {}
+  }
+}
