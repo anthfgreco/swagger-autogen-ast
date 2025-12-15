@@ -598,7 +598,10 @@ class RouteAnalyzer {
               bodySchema.type !== "object" &&
               Object.keys(bodySchema).length > 1) ||
             Object.keys(bodySchema.properties || {}).length > 0 ||
-            bodySchema.$ref
+            bodySchema.$ref ||
+            bodySchema.allOf ||
+            bodySchema.anyOf ||
+            bodySchema.oneOf
           ) {
             operation.requestBody = {
               content: {
