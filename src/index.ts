@@ -325,7 +325,28 @@ class RouteAnalyzer {
       ts.sys,
       path.dirname(configPath),
     );
-    return parsedConfig.options;
+
+    // Override restrictive options to ensure analysis works for:
+    // 1. Files outside rootDir
+    // 2. JS files
+    // 3. Extensionless imports
+    const options = parsedConfig.options;
+    options.allowJs = true;
+    options.checkJs = false;
+    options.noEmit = true;
+    delete options.rootDir;
+    delete options.composite;
+    delete options.tsBuildInfoFile;
+
+    // Force standard Node resolution to allow extensionless imports ("./a" instead of "./a.js")
+    options.moduleResolution = ts.ModuleResolutionKind.NodeJs;
+    options.module = ts.ModuleKind.CommonJS;
+
+    // Disable strict mode to match legacy behavior/expectations
+    options.strict = false;
+    options.strictNullChecks = false;
+
+    return options;
   }
 
   public analyze(entryFile: string) {
