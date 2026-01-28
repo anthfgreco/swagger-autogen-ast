@@ -606,6 +606,7 @@ class RouteAnalyzer {
     location: "query" | "header" | "path" | "cookie",
     type: "string" | "number" | "boolean",
     required = false,
+    description?: string,
   ) {
     if (!operation.parameters) operation.parameters = [];
 
@@ -623,6 +624,7 @@ class RouteAnalyzer {
       in: location,
       schema: { type },
       required,
+      description,
     });
   }
 
@@ -742,11 +744,16 @@ class RouteAnalyzer {
               if (queryType) {
                 const props = queryType.getProperties();
                 props.forEach((prop) => {
+                  const docComment = ts.displayPartsToString(
+                    prop.getDocumentationComment(this.checker),
+                  );
                   this.addParameter(
                     operation,
                     prop.getName(),
                     "query",
                     "string",
+                    false,
+                    docComment || undefined,
                   );
                 });
               }

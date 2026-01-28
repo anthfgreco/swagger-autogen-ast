@@ -101,7 +101,12 @@ If you don't use generics, it scans the function body for `as Type` assertions.
 ```typescript
 router.put("/users/:id", (req, res) => {
   const body = req.body as UpdateUser; // Schema inferred
-  const { status } = req.query as StatusQuery; // Params inferred
+
+  // Params inferred with descriptions
+  const { status } = req.query as {
+    /** Filter by status (active/inactive) */
+    status: string;
+  };
 });
 ```
 

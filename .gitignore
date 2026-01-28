@@ -144,7 +144,9 @@ vite.config.ts.timestamp-*
 
 # Custom
 .github
+.agent
 .env
 tests/real-repo
+notes.txt
 # swagger_output.json
 # swagger-output.json
