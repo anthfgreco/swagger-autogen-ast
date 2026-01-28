@@ -209,11 +209,9 @@ class SchemaBuilder {
           ? prop.declarations[0]
           : undefined);
 
-      if (!declaration) continue;
-
       // Check parent symbol to exclude standard Object methods (toString, valueOf, etc.)
       // We look at the declaration's parent (Interface/Class Declaration)
-      if (declaration.parent) {
+      if (declaration && declaration.parent) {
         const parentNode = declaration.parent;
         if (
           ts.isInterfaceDeclaration(parentNode) ||
@@ -224,11 +222,25 @@ class SchemaBuilder {
             continue;
           }
         }
+      } else {
+        // Fallback: Filter common Object methods by name if declaration is missing
+        const objectMethods = [
+          "toString",
+          "toLocaleString",
+          "valueOf",
+          "hasOwnProperty",
+          "isPrototypeOf",
+          "propertyIsEnumerable",
+          "constructor",
+        ];
+        if (objectMethods.includes(propName)) {
+          continue;
+        }
       }
 
       const propType = this.typeChecker.getTypeOfSymbolAtLocation(
         prop,
-        declaration,
+        declaration || (type.getSymbol()?.declarations?.[0] as ts.Node),
       );
 
       // Skip Functions/Methods
