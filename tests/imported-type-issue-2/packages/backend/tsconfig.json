@@ -1,0 +1,28 @@
+{
+  "compilerOptions": {
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "target": "ES2022",
+    "jsx": "react-jsx",
+    "baseUrl": ".",
+    "paths": {
+      "common": ["../common/src/index.ts"]
+    },
+
+    "composite": true,
+    "noEmit": true,
+
+    "lib": ["DOM", "DOM.Iterable", "ESNext"],
+    "strict": true,
+    "skipLibCheck": true,
+    "esModuleInterop": true,
+    "resolveJsonModule": true,
+    "forceConsistentCasingInFileNames": true,
+    "noFallthroughCasesInSwitch": true,
+    "noImplicitReturns": true
+  },
+
+  "references": [{ "path": "../common" }],
+
+  "include": ["src/**/*"]
+}

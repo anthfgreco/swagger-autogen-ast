@@ -1,0 +1,10 @@
+{
+  "name": "backend",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "common": "workspace:*",
+    "express": "^5.2.0"
+  }
+}

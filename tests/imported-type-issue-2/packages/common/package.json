@@ -1,0 +1,13 @@
+{
+  "name": "common",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./src/index.ts"
+    }
+  }
+}

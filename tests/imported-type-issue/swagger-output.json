@@ -1,0 +1,69 @@
+{
+  "openapi": "3.0.0",
+  "info": {
+    "title": "Test API",
+    "version": "1.0.0"
+  },
+  "servers": [],
+  "security": [],
+  "paths": {
+    "/auth/token": {
+      "post": {
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/__object"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [],
+        "tags": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/IApiClientTokenRequest"
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "IApiClientTokenRequest": {
+        "type": "object",
+        "properties": {
+          "clientId": {
+            "type": "string"
+          },
+          "clientSecret": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "clientId",
+          "clientSecret"
+        ]
+      },
+      "__object": {
+        "type": "object",
+        "properties": {
+          "token": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "token"
+        ]
+      }
+    },
+    "securitySchemes": {}
+  }
+}
