@@ -325,7 +325,28 @@ class RouteAnalyzer {
       ts.sys,
       path.dirname(configPath),
     );
-    return parsedConfig.options;
+
+    // Override restrictive options to ensure analysis works for:
+    // 1. Files outside rootDir
+    // 2. JS files
+    // 3. Extensionless imports
+    const options = parsedConfig.options;
+    options.allowJs = true;
+    options.checkJs = false;
+    options.noEmit = true;
+    delete options.rootDir;
+    delete options.composite;
+    delete options.tsBuildInfoFile;
+
+    // Force standard Node resolution to allow extensionless imports ("./a" instead of "./a.js")
+    options.moduleResolution = ts.ModuleResolutionKind.NodeJs;
+    options.module = ts.ModuleKind.CommonJS;
+
+    // Disable strict mode to match legacy behavior/expectations
+    options.strict = false;
+    options.strictNullChecks = false;
+
+    return options;
   }
 
   public analyze(entryFile: string) {
@@ -606,6 +627,7 @@ class RouteAnalyzer {
     location: "query" | "header" | "path" | "cookie",
     type: "string" | "number" | "boolean",
     required = false,
+    description?: string,
   ) {
     if (!operation.parameters) operation.parameters = [];
 
@@ -623,6 +645,7 @@ class RouteAnalyzer {
       in: location,
       schema: { type },
       required,
+      description,
     });
   }
 
@@ -742,11 +765,16 @@ class RouteAnalyzer {
               if (queryType) {
                 const props = queryType.getProperties();
                 props.forEach((prop) => {
+                  const docComment = ts.displayPartsToString(
+                    prop.getDocumentationComment(this.checker),
+                  );
                   this.addParameter(
                     operation,
                     prop.getName(),
                     "query",
                     "string",
+                    false,
+                    docComment || undefined,
                   );
                 });
               }

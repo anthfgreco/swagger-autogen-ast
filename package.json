@@ -1,6 +1,6 @@
 {
   "name": "swagger-autogen-ast",
-  "version": "1.0.6",
+  "version": "1.0.8",
   "description": "A zero-config OpenAPI 3.0 generator for Express. The AST-based spiritual successor to swagger-autogen with automatic type inference.",
   "keywords": [
     "swagger",
