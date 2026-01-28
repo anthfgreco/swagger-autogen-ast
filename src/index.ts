@@ -306,43 +306,81 @@ class RouteAnalyzer {
   private paths: OpenAPIV3.PathsObject = {};
 
   constructor(options: GeneratorOptions) {
-    const compilerOptions: ts.CompilerOptions = options.tsconfigPath
-      ? this.loadTsConfig(options.tsconfigPath)
+    const { compilerOptions, rootFiles } = options.tsconfigPath
+      ? this.loadTsConfigWithReferences(options.tsconfigPath)
       : {
-          allowJs: true,
-          module: ts.ModuleKind.CommonJS,
-          target: ts.ScriptTarget.ES2020,
-          moduleResolution: ts.ModuleResolutionKind.NodeJs,
-          esModuleInterop: true,
+          compilerOptions: {
+            allowJs: true,
+            module: ts.ModuleKind.CommonJS,
+            target: ts.ScriptTarget.ES2020,
+            moduleResolution: ts.ModuleResolutionKind.NodeJs,
+            esModuleInterop: true,
+          } as ts.CompilerOptions,
+          rootFiles: [] as string[],
         };
 
     console.log(
       `Using TS Config: ${options.tsconfigPath || "Default (None provided)"}`,
     );
 
-    // createProgram will resolve imported files automatically
-    this.program = ts.createProgram([options.entryFile], compilerOptions);
+    // Include entry file + all source files from referenced projects
+    const allRootFiles = [options.entryFile, ...rootFiles];
+    this.program = ts.createProgram(allRootFiles, compilerOptions);
     this.checker = this.program.getTypeChecker();
     this.schemaBuilder = new SchemaBuilder(this.checker);
   }
 
-  private loadTsConfig(configPath: string): ts.CompilerOptions {
+  /**
+   * Loads tsconfig and recursively follows project references to:
+   * 1. Collect all source files from referenced projects
+   * 2. Build path mappings so imports resolve to source (not dist)
+   *
+   * This allows type analysis without requiring pre-built declarations.
+   */
+  private loadTsConfigWithReferences(configPath: string): {
+    compilerOptions: ts.CompilerOptions;
+    rootFiles: string[];
+  } {
     const configFile = ts.readConfigFile(configPath, ts.sys.readFile);
     if (configFile.error) {
       console.error("Error reading tsconfig:", configFile.error);
-      return {};
+      return { compilerOptions: {}, rootFiles: [] };
     }
+
+    const configDir = path.dirname(configPath);
     const parsedConfig = ts.parseJsonConfigFileContent(
       configFile.config,
       ts.sys,
-      path.dirname(configPath),
+      configDir,
     );
 
-    // Override restrictive options to ensure analysis works for:
-    // 1. Files outside rootDir
-    // 2. JS files
-    // 3. Extensionless imports
     const options = parsedConfig.options;
+
+    // Collect source files from all referenced projects
+    const rootFiles: string[] = [];
+    const pathMappings: Record<string, string[]> = {
+      ...(options.paths || {}),
+    };
+
+    // Recursively process tsconfig references
+    const processedConfigs = new Set<string>();
+    this.collectReferencedSources(
+      configPath,
+      rootFiles,
+      pathMappings,
+      processedConfigs,
+    );
+
+    // Apply collected path mappings
+    if (Object.keys(pathMappings).length > 0) {
+      options.paths = pathMappings;
+      // baseUrl is required for paths to work
+      if (!options.baseUrl) {
+        options.baseUrl = configDir;
+      }
+    }
+
+    // Override restrictive options to ensure analysis works
     options.allowJs = true;
     options.checkJs = false;
     options.noEmit = true;
@@ -351,7 +389,6 @@ class RouteAnalyzer {
     delete options.tsBuildInfoFile;
 
     // Preserve modern module resolution modes that understand package.json "exports".
-    // Only fall back to NodeJs if not using a modern resolution mode.
     const modernResolutionModes = [
       ts.ModuleResolutionKind.Bundler,
       ts.ModuleResolutionKind.Node16,
@@ -369,7 +406,136 @@ class RouteAnalyzer {
     options.strict = false;
     options.strictNullChecks = false;
 
-    return options;
+    console.log(
+      `Discovered ${rootFiles.length} source files from project references`,
+    );
+    console.log(`Path mappings: ${JSON.stringify(Object.keys(pathMappings))}`);
+
+    return { compilerOptions: options, rootFiles };
+  }
+
+  /**
+   * Recursively collects source files from tsconfig references and builds path mappings.
+   * Detects package name from package.json and maps it to the source directory.
+   */
+  private collectReferencedSources(
+    configPath: string,
+    rootFiles: string[],
+    pathMappings: Record<string, string[]>,
+    processedConfigs: Set<string>,
+  ): void {
+    const absoluteConfigPath = path.resolve(configPath);
+    if (processedConfigs.has(absoluteConfigPath)) return;
+    processedConfigs.add(absoluteConfigPath);
+
+    const configFile = ts.readConfigFile(absoluteConfigPath, ts.sys.readFile);
+    if (configFile.error) return;
+
+    const configDir = path.dirname(absoluteConfigPath);
+    const rawConfig = configFile.config;
+
+    // Process references first (depth-first)
+    const references: { path: string }[] = rawConfig.references || [];
+    for (const ref of references) {
+      const refPath = path.resolve(configDir, ref.path);
+      // Reference can point to a directory (with tsconfig.json) or a file
+      const refConfigPath = fs.existsSync(path.join(refPath, "tsconfig.json"))
+        ? path.join(refPath, "tsconfig.json")
+        : refPath;
+
+      if (fs.existsSync(refConfigPath)) {
+        this.collectReferencedSources(
+          refConfigPath,
+          rootFiles,
+          pathMappings,
+          processedConfigs,
+        );
+      }
+    }
+
+    // Try to detect package name and source directory for path mapping
+    const packageJsonPath = path.join(configDir, "package.json");
+    if (fs.existsSync(packageJsonPath)) {
+      try {
+        const packageJson = JSON.parse(
+          fs.readFileSync(packageJsonPath, "utf-8"),
+        );
+        const packageName = packageJson.name;
+
+        if (packageName) {
+          // Determine source directory from tsconfig or common conventions
+          const parsedConfig = ts.parseJsonConfigFileContent(
+            rawConfig,
+            ts.sys,
+            configDir,
+          );
+
+          // Find the source root (rootDir, or first include pattern, or "src")
+          let sourceDir = parsedConfig.options.rootDir;
+          if (!sourceDir) {
+            const includes: string[] = rawConfig.include || [];
+            if (includes.length > 0) {
+              // Extract base directory from first include pattern (e.g., "src/**/*" -> "src")
+              const firstInclude = includes[0];
+              if (!firstInclude) {
+                return;
+              }
+
+              const baseDir = firstInclude.split(/[/*]/)[0];
+              if (baseDir) {
+                sourceDir = path.join(configDir, baseDir);
+              }
+            }
+          }
+          if (!sourceDir) {
+            // Default to "src" if it exists
+            const defaultSrc = path.join(configDir, "src");
+            if (fs.existsSync(defaultSrc)) {
+              sourceDir = defaultSrc;
+            }
+          }
+
+          // Add path mapping: packageName -> sourceDir
+          if (sourceDir && fs.existsSync(sourceDir)) {
+            const absoluteSourceDir = path.resolve(sourceDir);
+            // Map both "package" and "package/*" patterns
+            pathMappings[packageName] = [
+              path.join(absoluteSourceDir, "index.ts"),
+              path.join(absoluteSourceDir, "index"),
+              absoluteSourceDir,
+            ];
+            pathMappings[`${packageName}/*`] = [
+              path.join(absoluteSourceDir, "*"),
+            ];
+
+            // Add all source files from this package to rootFiles
+            const sourceFiles = this.findSourceFiles(absoluteSourceDir);
+            rootFiles.push(...sourceFiles);
+          }
+        }
+      } catch (e) {
+        // Ignore package.json parse errors
+      }
+    }
+  }
+
+  /**
+   * Finds all TypeScript source files in a directory (non-recursive for perf,
+   * since TS will follow imports anyway).
+   */
+  private findSourceFiles(dir: string): string[] {
+    const files: string[] = [];
+    try {
+      const entries = fs.readdirSync(dir, { withFileTypes: true });
+      for (const entry of entries) {
+        if (entry.isFile() && /\.(ts|tsx)$/.test(entry.name)) {
+          files.push(path.join(dir, entry.name));
+        }
+      }
+    } catch (e) {
+      // Directory doesn't exist or isn't readable
+    }
+    return files;
   }
 
   public analyze(entryFile: string) {
