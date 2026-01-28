@@ -350,9 +350,20 @@ class RouteAnalyzer {
     delete options.composite;
     delete options.tsBuildInfoFile;
 
-    // Force standard Node resolution to allow extensionless imports ("./a" instead of "./a.js")
-    options.moduleResolution = ts.ModuleResolutionKind.NodeJs;
-    options.module = ts.ModuleKind.CommonJS;
+    // Preserve modern module resolution modes that understand package.json "exports".
+    // Only fall back to NodeJs if not using a modern resolution mode.
+    const modernResolutionModes = [
+      ts.ModuleResolutionKind.Bundler,
+      ts.ModuleResolutionKind.Node16,
+      ts.ModuleResolutionKind.NodeNext,
+    ];
+    if (
+      !options.moduleResolution ||
+      !modernResolutionModes.includes(options.moduleResolution)
+    ) {
+      options.moduleResolution = ts.ModuleResolutionKind.NodeJs;
+      options.module = ts.ModuleKind.CommonJS;
+    }
 
     // Disable strict mode to match legacy behavior/expectations
     options.strict = false;

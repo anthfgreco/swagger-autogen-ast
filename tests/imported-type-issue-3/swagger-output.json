@@ -1,0 +1,157 @@
+{
+  "openapi": "3.0.0",
+  "info": {
+    "title": "Test API",
+    "version": "1.0.0"
+  },
+  "servers": [],
+  "security": [],
+  "paths": {
+    "/auth/token": {
+      "post": {
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IApiClientTokenResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request"
+          }
+        },
+        "parameters": [],
+        "tags": [
+          "Auth"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/IApiClientTokenRequest"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/user": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IUser"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request"
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false,
+            "description": "User ID."
+          }
+        ],
+        "tags": [
+          "Auth"
+        ]
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "IApiClientTokenRequest": {
+        "type": "object",
+        "properties": {
+          "clientId": {
+            "type": "string",
+            "description": "The client ID issued to the partner."
+          },
+          "clientSecret": {
+            "type": "string",
+            "description": "The secret key issued to the partner."
+          }
+        },
+        "required": [
+          "clientId",
+          "clientSecret"
+        ]
+      },
+      "IApiClientTokenResponse": {
+        "type": "object",
+        "properties": {
+          "accessToken": {
+            "type": "string",
+            "description": "The JWT access token."
+          },
+          "tokenType": {
+            "type": "string",
+            "description": "Token type, always \"Bearer\"."
+          },
+          "expiresIn": {
+            "type": "number",
+            "description": "Token lifetime in seconds."
+          },
+          "issuedAt": {
+            "type": "string",
+            "description": "ISO timestamp when the token was issued."
+          },
+          "expiresAt": {
+            "type": "string",
+            "description": "ISO timestamp when the token expires."
+          }
+        },
+        "required": [
+          "accessToken",
+          "tokenType",
+          "expiresIn",
+          "issuedAt",
+          "expiresAt"
+        ]
+      },
+      "IUser": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "firstName": {
+            "type": "string"
+          },
+          "lastName": {
+            "type": "string"
+          },
+          "mainParentClinicId": {
+            "type": "string",
+            "enum": [
+              "CLINICONE",
+              "CLINICTWO"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "firstName",
+          "lastName",
+          "mainParentClinicId"
+        ]
+      }
+    },
+    "securitySchemes": {}
+  }
+}
