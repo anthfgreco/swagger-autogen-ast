@@ -82,7 +82,16 @@ class SchemaBuilder {
     // Handle Arrays
     if (this.isArrayType(type)) {
       const typeArgs = (type as any).typeArguments;
-      const elementType = typeArgs && typeArgs.length > 0 ? typeArgs[0] : null;
+      let elementType = typeArgs && typeArgs.length > 0 ? typeArgs[0] : null;
+
+      // Fallback to index type if type-arguments are not available (common for T[] syntax)
+      if (!elementType) {
+        elementType = this.typeChecker.getIndexTypeOfType(
+          type,
+          ts.IndexKind.Number,
+        );
+      }
+
       return {
         type: "array",
         items: elementType ? this.typeToSchema(elementType, depth + 1) : {},
@@ -871,7 +880,12 @@ class RouteAnalyzer {
           const expressionText = propAccess.expression.getText();
           const methodText = propAccess.name.text;
 
-          if (expressionText === resName) {
+          // Handle chained calls like res.status(200).json(...)
+          const isRes =
+            expressionText === resName ||
+            expressionText.startsWith(resName + ".");
+
+          if (isRes) {
             // res.sendStatus(code) or res.status(code)
             if (methodText === "sendStatus" || methodText === "status") {
               const arg = n.arguments[0];
@@ -890,16 +904,32 @@ class RouteAnalyzer {
                 const responseType = this.checker.getTypeAtLocation(arg);
                 const schema = this.schemaBuilder.generateSchema(responseType);
 
-                if (!operation.responses["200"]) {
-                  operation.responses["200"] = { description: "OK" };
+                let targetStatus = "200";
+                if (ts.isCallExpression(propAccess.expression)) {
+                  const innerCall = propAccess.expression;
+                  if (ts.isPropertyAccessExpression(innerCall.expression)) {
+                    const innerMethod = innerCall.expression.name.text;
+                    if (
+                      (innerMethod === "status" ||
+                        innerMethod === "sendStatus") &&
+                      innerCall.arguments[0] &&
+                      ts.isNumericLiteral(innerCall.arguments[0])
+                    ) {
+                      targetStatus = innerCall.arguments[0].text;
+                    }
+                  }
                 }
 
-                const successResponse = operation.responses[
-                  "200"
+                if (!operation.responses[targetStatus]) {
+                  this.addResponse(operation, targetStatus);
+                }
+
+                const responseObj = operation.responses[
+                  targetStatus
                 ] as OpenAPIV3.ResponseObject;
 
-                if (!successResponse.content) {
-                  successResponse.content = {
+                if (!responseObj.content) {
+                  responseObj.content = {
                     "application/json": { schema },
                   };
                 }

@@ -1,0 +1,100 @@
+{
+  "openapi": "3.0.0",
+  "info": {
+    "title": "Test API",
+    "version": "1.0.0"
+  },
+  "servers": [],
+  "security": [],
+  "paths": {
+    "/appointments": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/IClinicAppointment"
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/__object"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [],
+        "tags": [
+          "Clinic"
+        ],
+        "summary": "Get appointments"
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "IClinicAppointment": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "patientId": {
+            "type": "string"
+          },
+          "patientFirstName": {
+            "type": "string"
+          },
+          "patientLastName": {
+            "type": "string"
+          },
+          "startAt": {
+            "type": "string"
+          },
+          "durationMins": {
+            "type": "number"
+          },
+          "serviceName": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "patientId",
+          "patientFirstName",
+          "patientLastName",
+          "startAt",
+          "durationMins",
+          "serviceName",
+          "status"
+        ]
+      },
+      "__object": {
+        "type": "object",
+        "properties": {
+          "error": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "error"
+        ]
+      }
+    },
+    "securitySchemes": {}
+  }
+}

@@ -21,7 +21,14 @@
             }
           },
           "400": {
-            "description": "Bad Request"
+            "description": "Bad Request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/__object"
+                }
+              }
+            }
           }
         },
         "parameters": [],
@@ -53,7 +60,14 @@
             }
           },
           "400": {
-            "description": "Bad Request"
+            "description": "Bad Request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/__object"
+                }
+              }
+            }
           }
         },
         "parameters": [
@@ -90,6 +104,21 @@
         "required": [
           "clientId",
           "clientSecret"
+        ]
+      },
+      "__object": {
+        "type": "object",
+        "properties": {
+          "error": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "error",
+          "message"
         ]
       },
       "IApiClientTokenResponse": {

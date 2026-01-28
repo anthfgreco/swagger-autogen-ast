@@ -14,7 +14,14 @@
             "description": "OK"
           },
           "201": {
-            "description": "Created"
+            "description": "Created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/__object"
+                }
+              }
+            }
           },
           "401": {
             "description": "Unauthorized"
@@ -43,7 +50,19 @@
     }
   },
   "components": {
-    "schemas": {},
+    "schemas": {
+      "__object": {
+        "type": "object",
+        "properties": {
+          "created": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "created"
+        ]
+      }
+    },
     "securitySchemes": {}
   }
 }

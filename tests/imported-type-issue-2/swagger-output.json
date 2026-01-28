@@ -21,7 +21,14 @@
             }
           },
           "400": {
-            "description": "Bad Request"
+            "description": "Bad Request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/__object"
+                }
+              }
+            }
           }
         },
         "parameters": [],
@@ -71,6 +78,17 @@
         "required": [
           "clientId",
           "clientSecret"
+        ]
+      },
+      "__object": {
+        "type": "object",
+        "properties": {
+          "error": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "error"
         ]
       },
       "IApiClientTokenResponse": {

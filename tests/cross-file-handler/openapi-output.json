@@ -14,7 +14,26 @@
             "description": "OK"
           },
           "201": {
-            "description": "Created"
+            "description": "Created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "username": {
+                      "type": "string"
+                    },
+                    "email": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "username",
+                    "email"
+                  ]
+                }
+              }
+            }
           }
         },
         "parameters": [],

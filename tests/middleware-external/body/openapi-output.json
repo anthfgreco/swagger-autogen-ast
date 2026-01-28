@@ -14,7 +14,14 @@
             "description": "OK"
           },
           "201": {
-            "description": "Created"
+            "description": "Created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/__object"
+                }
+              }
+            }
           },
           "400": {
             "description": "Bad Request"
@@ -26,7 +33,19 @@
     }
   },
   "components": {
-    "schemas": {},
+    "schemas": {
+      "__object": {
+        "type": "object",
+        "properties": {
+          "created": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "created"
+        ]
+      }
+    },
     "securitySchemes": {}
   }
 }
