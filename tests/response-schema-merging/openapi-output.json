@@ -1,0 +1,105 @@
+{
+  "openapi": "3.0.0",
+  "info": {
+    "title": "Test API",
+    "version": "1.0.0"
+  },
+  "servers": [],
+  "security": [],
+  "paths": {
+    "/pet": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/IDog"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ICat"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "parameters": [],
+        "tags": [
+          "Pets"
+        ]
+      }
+    },
+    "/dogs": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IDog"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [],
+        "tags": [
+          "Pets"
+        ]
+      }
+    },
+    "/mixed": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IDog"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [],
+        "tags": [
+          "Pets"
+        ]
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "IDog": {
+        "type": "object",
+        "properties": {
+          "breed": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "breed"
+        ]
+      },
+      "ICat": {
+        "type": "object",
+        "properties": {
+          "lives": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "lives"
+        ]
+      }
+    },
+    "securitySchemes": {}
+  }
+}

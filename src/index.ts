@@ -862,6 +862,116 @@ class RouteAnalyzer {
     );
   }
 
+  /**
+   * Checks if a schema provides meaningful type information.
+   * Returns false for "empty" schemas like {}, { type: "object" }, or { type: "array", items: {} }.
+   */
+  private isStructurallyMeaningful(
+    schema: OpenAPIV3.SchemaObject | OpenAPIV3.ReferenceObject,
+  ): boolean {
+    if ("$ref" in schema) return true;
+
+    // Empty object schema
+    if (Object.keys(schema).length === 0) return false;
+    if (
+      schema.type === "object" &&
+      !schema.properties &&
+      !schema.allOf &&
+      !schema.anyOf &&
+      !schema.oneOf
+    ) {
+      return false;
+    }
+
+    // Array with empty/unknown items
+    if (schema.type === "array") {
+      const items = schema.items;
+      if (!items) return false;
+      if ("$ref" in items) return true;
+      // items: {} or items: { type: "string", format: "nullable" } from unknown[]
+      if (Object.keys(items).length === 0) return false;
+      if (
+        items.type === "string" &&
+        items.format === "nullable" &&
+        Object.keys(items).length === 2
+      ) {
+        return false;
+      }
+    }
+
+    return true;
+  }
+
+  /**
+   * Compares two schemas for equivalence using JSON serialization.
+   */
+  private schemasAreEquivalent(
+    a: OpenAPIV3.SchemaObject | OpenAPIV3.ReferenceObject,
+    b: OpenAPIV3.SchemaObject | OpenAPIV3.ReferenceObject,
+  ): boolean {
+    return JSON.stringify(a) === JSON.stringify(b);
+  }
+
+  /**
+   * Merges a new schema into an existing response object.
+   * - If no existing content, sets the new schema.
+   * - If existing is empty but new is meaningful, replaces.
+   * - If both meaningful and different, merges with oneOf.
+   */
+  private mergeResponseSchema(
+    responseObj: OpenAPIV3.ResponseObject,
+    newSchema: OpenAPIV3.SchemaObject | OpenAPIV3.ReferenceObject,
+  ): void {
+    const newIsMeaningful = this.isStructurallyMeaningful(newSchema);
+
+    // Skip empty schemas entirely
+    if (!newIsMeaningful) return;
+
+    // No existing content - just set it
+    if (!responseObj.content) {
+      responseObj.content = {
+        "application/json": { schema: newSchema },
+      };
+      return;
+    }
+
+    const existingSchema = responseObj.content["application/json"]?.schema;
+    if (!existingSchema) {
+      responseObj.content["application/json"] = { schema: newSchema };
+      return;
+    }
+
+    const existingIsMeaningful = this.isStructurallyMeaningful(existingSchema);
+
+    // Existing is empty, new is meaningful - replace
+    if (!existingIsMeaningful && newIsMeaningful) {
+      responseObj.content["application/json"] = { schema: newSchema };
+      return;
+    }
+
+    // Both meaningful - check if they're the same
+    if (this.schemasAreEquivalent(existingSchema, newSchema)) {
+      return; // Already have this schema
+    }
+
+    // Different meaningful schemas - merge with oneOf
+    // Check if existing is already a oneOf
+    if ("oneOf" in existingSchema && Array.isArray(existingSchema.oneOf)) {
+      // Check if newSchema is already in the oneOf
+      const alreadyExists = existingSchema.oneOf.some((s) =>
+        this.schemasAreEquivalent(s, newSchema),
+      );
+      if (!alreadyExists) {
+        existingSchema.oneOf.push(newSchema);
+      }
+    } else {
+      // Convert to oneOf
+      responseObj.content["application/json"] = {
+        schema: { oneOf: [existingSchema, newSchema] },
+      };
+    }
+  }
+
   private scanBodyUsage(
     node: ts.Node,
     operation: OpenAPIV3.OperationObject,
@@ -928,11 +1038,8 @@ class RouteAnalyzer {
                   targetStatus
                 ] as OpenAPIV3.ResponseObject;
 
-                if (!responseObj.content) {
-                  responseObj.content = {
-                    "application/json": { schema },
-                  };
-                }
+                // Use smart merging: skips empty schemas, uses oneOf for different shapes
+                this.mergeResponseSchema(responseObj, schema);
               }
             }
           }
