@@ -1,3 +1,5 @@
+
+
 # swagger-autogen-ast
 
 **Zero-config OpenAPI 3.0 generation for Express.**
@@ -78,7 +80,7 @@ See the [/tests](./tests) directory for a complete set of examples covering all 
 
 ## Automatic Inference
 
-The tool relies on standard TypeScript/Express patterns.
+The tool relies on standard TypeScript/Express patterns. Additionally, JSDoc comments attached to your TypeScript interfaces and types are automatically extracted and included as descriptions in the generated OpenAPI schemas.
 
 ### 1. Request Bodies & Query Params
 
